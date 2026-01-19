@@ -1,0 +1,72 @@
+# CMake build directories
+build/
+build_new/
+
+# CMake cache
+CMakeCache.txt
+
+# CMake generated files
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+*.cmake
+
+# Visual Studio build artifacts
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.tlog
+*.lastbuildstate
+*.log
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.suo
+*.ncb
+*.opt
+*.plg
+*.aps
+*.clw
+*.sbr
+
+# Visual Studio intermediate files
+Debug/
+Release/
+x64/
+Win32/
+ipch/
+
+# ReSharper
+_ReSharper*/
+*.ReSharper
+.DS_Store
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.vcxuser
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# IDE
+.idea/
+.vscode/
+.trae/
+*.swp
+*.swo
+*~
