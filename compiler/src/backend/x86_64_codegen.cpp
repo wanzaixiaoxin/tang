@@ -1,451 +1,443 @@
 #include <iostream>
 #include <fstream>
-#include <string>
+#include <sstream>
 #include <vector>
-#include <map>
-#include <stdexcept>
-#include "../../include/x86_64_codegen.h"
+#include <unordered_map>
+#include <iomanip>
+#include "../../include/ir.h"
 
 namespace tang {
-
 namespace ir {
 
-X86_64CodeGenerator::X86_64CodeGenerator() {
-    // Initialize register allocation table
-    // Simple register allocation: map virtual registers to physical registers
-    // Using System V AMD64 calling convention
-    
-    // General purpose registers list
-    std::vector<std::string> physical_registers = {
-        "rax", "rbx", "rcx", "rdx", "rsi", "rdi",
-        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
-    };
-    
-    // Initialize register mappings
-    for (size_t i = 0; i < physical_registers.size(); ++i) {
-        RegisterMap reg_map;
-        reg_map.virtual_reg = i;
-        reg_map.physical_reg = physical_registers[i];
-        register_allocation.push_back(reg_map);
-    }
-}
-
-void X86_64CodeGenerator::generateCode(const Module& module, const std::string& output_file) {
-    // Generate assembly file
-    generateAssembly(module, output_file);
-    
-    // Here can add code to call assembler and linker
-    // Simplified processing, only generate assembly file
-}
-
-void X86_64CodeGenerator::generateAssembly(const Module& module, const std::string& output_file) {
-    std::ofstream out(output_file);
-    if (!out.is_open()) {
-        throw std::runtime_error("Failed to open output file: " + output_file);
+// x86-64 code generator implementation
+class X86_64CodeGenerator : public CodeGenerator {
+public:
+    X86_64CodeGenerator() {
+        // Initialize register mapping
+        initRegisterMapping();
     }
     
-    // Generate assembly file header
-    out << ".section .data" << std::endl;
-    out << ".align 8" << std::endl;
-    
-    // Generate data section
-    generateDataSection(module, out);
-    
-    // Generate text section start
-    generateTextSectionStart(out);
-    
-    // Generate all functions
-    for (int i = 0; i < module.functions.size(); i++) {
-        const Function& func = module.functions[i];
-        generateFunction(func, out);
+    void generateCode(const Module& module, const std::string& output_file) override {
+        std::stringstream code;
+        
+        // Generate assembly header
+        code << ".text\n";
+        code << ".global _start\n";
+        code << "\n";
+        
+        // Generate code for each function
+        for (const auto& func : module.functions) {
+            generateFunctionCode(code, func);
+        }
+        
+        // Generate entry point
+        generateEntryPoint(code, module);
+        
+        // Write to file
+        std::ofstream file(output_file);
+        file << code.str();
+        file.close();
+        
+        std::cout << "Generated x86-64 assembly code to: " << output_file << std::endl;
     }
     
-    // Generate text section end
-    generateTextSectionEnd(out);
+private:
+    std::unordered_map<Register, std::string> register_map;
+    std::unordered_map<OpCode, std::string> opcode_map;
     
-    out.close();
-}
-
-void X86_64CodeGenerator::generateDataSection(const Module& module, std::ostream& out) {
-    // Simplified processing, no data section for now
-    out << "\n";
-}
-
-void X86_64CodeGenerator::generateTextSectionStart(std::ostream& out) {
-    out << ".section .text" << std::endl;
-    out << ".global main" << std::endl;
-    out << ".align 4" << std::endl;
-}
-
-void X86_64CodeGenerator::generateTextSectionEnd(std::ostream& out) {
-    // Simplified processing, no additional content for now
-    out << "\n";
-}
-
-void X86_64CodeGenerator::generateFunction(const Function& func, std::ostream& out) {
-    current_function = func.name;
-    
-    // Generate function label
-    out << func.name << ":" << std::endl;
-    
-    // Generate function prologue
-    out << "    pushq %rbp" << std::endl;
-    out << "    movq %rsp, %rbp" << std::endl;
-    
-    // Allocate stack space for local variables
-    // Simplified processing, no allocation for now
-    
-    // Generate all basic blocks
-    for (int i = 0; i < func.basic_blocks.size(); i++) {
-        const BasicBlock& bb = func.basic_blocks[i];
-        generateBasicBlock(bb, out);
+    void initRegisterMapping() {
+        // Map virtual registers to x86-64 registers
+        register_map[0] = "rax";
+        register_map[1] = "rbx";
+        register_map[2] = "rcx";
+        register_map[3] = "rdx";
+        register_map[4] = "rsi";
+        register_map[5] = "rdi";
+        register_map[6] = "r8";
+        register_map[7] = "r9";
+        register_map[8] = "r10";
+        register_map[9] = "r11";
+        register_map[10] = "r12";
+        register_map[11] = "r13";
+        register_map[12] = "r14";
+        register_map[13] = "r15";
+        
+        // Map IR opcodes to x86-64 instructions
+        opcode_map[OP_ADD] = "add";
+        opcode_map[OP_SUB] = "sub";
+        opcode_map[OP_MUL] = "imul";
+        opcode_map[OP_DIV] = "idiv";
+        opcode_map[OP_MOD] = "idiv"; // mod uses remainder from idiv
+        opcode_map[OP_EQ] = "cmp";
+        opcode_map[OP_NEQ] = "cmp";
+        opcode_map[OP_LT] = "cmp";
+        opcode_map[OP_LTE] = "cmp";
+        opcode_map[OP_GT] = "cmp";
+        opcode_map[OP_GTE] = "cmp";
+        opcode_map[OP_AND] = "and";
+        opcode_map[OP_OR] = "or";
+        opcode_map[OP_NOT] = "not";
+        opcode_map[OP_LOAD] = "mov";
+        opcode_map[OP_STORE] = "mov";
+        opcode_map[OP_JMP] = "jmp";
+        opcode_map[OP_BRANCH] = "jmp";
+        opcode_map[OP_CALL] = "call";
+        opcode_map[OP_RET] = "ret";
+        opcode_map[OP_CONST] = "mov";
     }
     
-    // Generate function epilogue
-    out << "    popq %rbp" << std::endl;
-    out << "    ret" << std::endl;
-    out << "\n";
-}
-
-void X86_64CodeGenerator::generateBasicBlock(const BasicBlock& bb, std::ostream& out) {
-    // Generate basic block label
-    out << "bb" << bb.id << ":" << std::endl;
-    
-    // Generate all instructions
-    for (int i = 0; i < bb.instructions.size(); i++) {
-        const Instruction& instr = bb.instructions[i];
-        generateInstruction(instr, out);
+    void generateFunctionCode(std::stringstream& code, const Function& func) {
+        code << "# Function: " << func.name << "\n";
+        code << func.name << ":\n";
+        
+        // Function prologue
+        code << "    push rbp\n";
+        code << "    mov rbp, rsp\n";
+        
+        // Allocate stack space for local variables
+        int stack_size = (func.params.size() + 10) * 8; // Reserve space for params + locals
+        code << "    sub rsp, " << stack_size << "\n";
+        
+        // Save parameters to stack
+        for (size_t i = 0; i < func.params.size(); ++i) {
+            Register param_reg = func.params[i];
+            std::string x86_reg = getX86Register(param_reg);
+            int offset = i * 8;
+            code << "    mov [rbp - " << (offset + 8) << "], " << x86_reg << "\n";
+        }
+        
+        // Generate code for each basic block
+        for (const auto& bb : func.basic_blocks) {
+            generateBasicBlockCode(code, bb, func);
+        }
+        
+        // Function epilogue
+        code << "." << func.name << "_exit:\n";
+        code << "    mov rsp, rbp\n";
+        code << "    pop rbp\n";
+        code << "    ret\n";
+        code << "\n";
     }
-}
-
-void X86_64CodeGenerator::generateInstruction(const Instruction& instr, std::ostream& out) {
-    out << "    ";
     
-    switch (instr.op_code) {
-        case tang::ir::OP_ADD:
-            if (instr.operands.size() == 2) {
-                std::string dst = generateOperand(instr.operands[0]);
-                std::string src = generateOperand(instr.operands[1]);
-                out << "addq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_SUB:
-            if (instr.operands.size() == 2) {
-                std::string dst = generateOperand(instr.operands[0]);
-                std::string src = generateOperand(instr.operands[1]);
-                out << "subq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_MUL:
-            if (instr.operands.size() == 2) {
-                std::string dst = generateOperand(instr.operands[0]);
-                std::string src = generateOperand(instr.operands[1]);
-                out << "imulq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_DIV:
-            if (instr.operands.size() == 2) {
-                // x86_64 division uses fixed registers
-                std::string src = generateOperand(instr.operands[1]);
-                out << "movq " << src << ", %rax" << std::endl;
-                out << "cqto" << std::endl;
-                out << "idivq " << generateOperand(instr.operands[0]) << std::endl;
-                out << "movq %rax, " << generateOperand(instr.operands[0]) << std::endl;
-            }
-            break;
-        case tang::ir::OP_MOD:
-            if (instr.operands.size() == 2) {
-                // x86_64 mod uses fixed registers
-                std::string src = generateOperand(instr.operands[1]);
-                out << "movq " << src << ", %rax" << std::endl;
-                out << "cqto" << std::endl;
-                out << "idivq " << generateOperand(instr.operands[0]) << std::endl;
-                out << "movq %rdx, " << generateOperand(instr.operands[0]) << std::endl;
-            }
-            break;
-        case tang::ir::OP_EQ:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "sete %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_NEQ:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "setne %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_LT:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "setl %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_LTE:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "setle %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_GT:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "setg %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_GTE:
-            if (instr.operands.size() == 2) {
-                std::string left = generateOperand(instr.operands[0]);
-                std::string right = generateOperand(instr.operands[1]);
-                out << "cmpq " << right << ", " << left << std::endl;
-                out << "setge %al" << std::endl;
-                out << "movzbl %al, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_AND:
-            if (instr.operands.size() == 2) {
-                std::string dst = generateOperand(instr.operands[0]);
-                std::string src = generateOperand(instr.operands[1]);
-                out << "andq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_OR:
-            if (instr.operands.size() == 2) {
-                std::string dst = generateOperand(instr.operands[0]);
-                std::string src = generateOperand(instr.operands[1]);
-                out << "orq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_NOT:
-            if (instr.operands.size() == 1) {
-                std::string reg = generateOperand(instr.operands[0]);
-                out << "notq " << reg << std::endl;
-            }
-            break;
-        case tang::ir::OP_LOAD:
-            if (instr.operands.size() == 1) {
-                std::string mem = generateOperand(instr.operands[0]);
-                out << "movq " << mem << ", " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_STORE:
-            if (instr.operands.size() == 2) {
-                std::string src = generateOperand(instr.operands[0]);
-                std::string dst = generateOperand(instr.operands[1]);
-                out << "movq " << src << ", " << dst << std::endl;
-            }
-            break;
-        case tang::ir::OP_ALLOC:
-            // Simplified processing, use stack allocation
-            if (instr.operands.size() == 1) {
-                std::string size = generateOperand(instr.operands[0]);
-                out << "subq " << size << ", %rsp" << std::endl;
-                out << "movq %rsp, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_FREE:
-            // Simplified processing, no memory free
-            break;
-        case tang::ir::OP_JMP:
-            if (instr.operands.size() == 1) {
-                std::string bb = generateOperand(instr.operands[0]);
-                out << "jmp " << bb << std::endl;
-            }
-            break;
-        case tang::ir::OP_BRANCH:
-            if (instr.operands.size() == 3) {
-                std::string cond = generateOperand(instr.operands[0]);
-                std::string true_bb = generateOperand(instr.operands[1]);
-                std::string false_bb = generateOperand(instr.operands[2]);
+    void generateBasicBlockCode(std::stringstream& code, const BasicBlock& bb, const Function& func) {
+        code << ".L" << bb.id << ":\n";
+        
+        for (const auto& instr : bb.instructions) {
+            generateInstructionCode(code, instr, bb.id, func);
+        }
+        
+        code << "\n";
+    }
+    
+    void generateInstructionCode(std::stringstream& code, const Instruction& instr, BasicBlockId bb_id, const Function& func) {
+        std::string dst_reg = instr.dst != -1 ? getX86Register(instr.dst) : "";
+        
+        switch (instr.op_code) {
+            case OP_ADD:
+            case OP_SUB:
+            case OP_MUL:
+            case OP_AND:
+            case OP_OR:
+                generateBinaryOpCode(code, instr, dst_reg);
+                break;
                 
-                // Simplified processing, assume condition is comparison result
-                out << "cmpq $0, " << cond << std::endl;
-                out << "jne " << true_bb << std::endl;
-                out << "jmp " << false_bb << std::endl;
-            }
-            break;
-        case tang::ir::OP_CALL:
-            if (instr.operands.size() == 1) {
-                std::string func = generateOperand(instr.operands[0]);
-                out << "call " << func << std::endl;
-                if (instr.dst != -1) {
-                    out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-                }
-            }
-            break;
-        case tang::ir::OP_RET:
-            if (instr.operands.size() == 1) {
-                std::string ret_val = generateOperand(instr.operands[0]);
-                out << "movq " << ret_val << ", %rax" << std::endl;
-            }
-            out << "popq %rbp" << std::endl;
-            out << "ret" << std::endl;
-            break;
-        case tang::ir::OP_CONST:
-            if (instr.operands.size() == 1) {
-                std::string val = generateOperand(instr.operands[0]);
-                out << "movq $" << val << ", " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_CORO_CREATE:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 2) {
-                std::string func = generateOperand(instr.operands[0]);
-                std::string stack_size = generateOperand(instr.operands[1]);
-                out << "movq $" << stack_size << ", %rdi" << std::endl;
-                out << "movq $" << func << ", %rsi" << std::endl;
-                out << "call coro_create" << std::endl;
-                out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-            }
-            break;
-        case tang::ir::OP_CORO_YIELD:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 1) {
-                std::string coro = generateOperand(instr.operands[0]);
-                out << "movq " << coro << ", %rdi" << std::endl;
-                out << "call coro_yield" << std::endl;
-            }
-            break;
-        case tang::ir::OP_CORO_RESUME:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 1) {
-                std::string coro = generateOperand(instr.operands[0]);
-                out << "movq " << coro << ", %rdi" << std::endl;
-                out << "call coro_resume" << std::endl;
-                if (instr.dst != -1) {
-                    out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-                }
-            }
-            break;
-        case tang::ir::OP_CORO_DESTROY:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 1) {
-                std::string coro = generateOperand(instr.operands[0]);
-                out << "movq " << coro << ", %rdi" << std::endl;
-                out << "call coro_destroy" << std::endl;
-            }
-            break;
-        case tang::ir::OP_ASYNC_READ:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 3) {
-                std::string fd = generateOperand(instr.operands[0]);
-                std::string buf = generateOperand(instr.operands[1]);
-                std::string size = generateOperand(instr.operands[2]);
-                out << "movq " << fd << ", %rdi" << std::endl;
-                out << "movq " << buf << ", %rsi" << std::endl;
-                out << "movq " << size << ", %rdx" << std::endl;
-                out << "call async_read" << std::endl;
-                if (instr.dst != -1) {
-                    out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-                }
-            }
-            break;
-        case tang::ir::OP_ASYNC_WRITE:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 3) {
-                std::string fd = generateOperand(instr.operands[0]);
-                std::string buf = generateOperand(instr.operands[1]);
-                std::string size = generateOperand(instr.operands[2]);
-                out << "movq " << fd << ", %rdi" << std::endl;
-                out << "movq " << buf << ", %rsi" << std::endl;
-                out << "movq " << size << ", %rdx" << std::endl;
-                out << "call async_write" << std::endl;
-                if (instr.dst != -1) {
-                    out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-                }
-            }
-            break;
-        case tang::ir::OP_ASYNC_WAIT:
-            // Simplified processing, call runtime function
-            if (instr.operands.size() >= 1) {
-                std::string async_op = generateOperand(instr.operands[0]);
-                out << "movq " << async_op << ", %rdi" << std::endl;
-                out << "call async_wait" << std::endl;
-                if (instr.dst != -1) {
-                    out << "movq %rax, " << allocateRegister(instr.dst) << std::endl;
-                }
-            }
-            break;
-        default:
-            out << "# Unknown opcode: " << instr.op_code << std::endl;
-            break;
-    }
-}
-
-std::string X86_64CodeGenerator::generateOperand(const Operand& op) {
-    switch (op.type) {
-        case tang::ir::REGISTER:
-            return getPhysicalRegister(op.value.reg);
-        case tang::ir::IMMEDIATE:
-            return std::to_string(op.value.imm);
-        case tang::ir::BASIC_BLOCK:
-            return "bb" + std::to_string(op.value.bb);
-        case tang::ir::FUNCTION:
-            // Simplified processing, return function ID directly
-            return "func" + std::to_string(op.value.func);
-        case tang::ir::MEMORY:
-            {
-                std::string base = getPhysicalRegister(op.value.mem.base);
-                int32_t offset = op.value.mem.offset;
-                if (offset == 0) {
-                    return "(" + base + ")";
-                } else if (offset > 0) {
-                    return std::to_string(offset) + "(" + base + ")";
-                } else {
-                    return "-" + std::to_string(-offset) + "(" + base + ")";
-                }
-            }
-        default:
-            return "# Unknown operand type";
-    }
-}
-
-std::string X86_64CodeGenerator::allocateRegister(Register virt_reg) {
-    // Simple register allocation: if virtual register is mapped, return mapped physical register
-    // Otherwise, use new physical register
-    
-    for (const auto& reg_map : register_allocation) {
-        if (reg_map.virtual_reg == virt_reg) {
-            return reg_map.physical_reg;
+            case OP_DIV:
+            case OP_MOD:
+                generateDivModCode(code, instr, dst_reg);
+                break;
+                
+            case OP_EQ:
+            case OP_NEQ:
+            case OP_LT:
+            case OP_LTE:
+            case OP_GT:
+            case OP_GTE:
+                generateComparisonCode(code, instr, dst_reg, bb_id);
+                break;
+                
+            case OP_NOT:
+                generateNotCode(code, instr, dst_reg);
+                break;
+                
+            case OP_LOAD:
+                generateLoadCode(code, instr, dst_reg);
+                break;
+                
+            case OP_STORE:
+                generateStoreCode(code, instr);
+                break;
+                
+            case OP_JMP:
+                generateJumpCode(code, instr);
+                break;
+                
+            case OP_BRANCH:
+                generateBranchCode(code, instr, bb_id);
+                break;
+                
+            case OP_CALL:
+                generateCallCode(code, instr, dst_reg);
+                break;
+                
+            case OP_RET:
+                generateReturnCode(code, instr);
+                break;
+                
+            case OP_CONST:
+                generateConstCode(code, instr, dst_reg);
+                break;
+                
+            case OP_ALLOC:
+                generateAllocCode(code, instr, dst_reg);
+                break;
+                
+            case OP_FREE:
+                generateFreeCode(code, instr);
+                break;
+                
+            default:
+                // Generate placeholder for unsupported operations
+                code << "    # Unsupported operation: " << static_cast<int>(instr.op_code) << "\n";
+                break;
         }
     }
     
-    // If not found, add new mapping
-    // Simplified processing, assume enough physical registers
-    RegisterMap new_reg_map;
-    new_reg_map.virtual_reg = virt_reg;
-    new_reg_map.physical_reg = "r" + std::to_string(virt_reg);
-    register_allocation.push_back(new_reg_map);
-    
-    return new_reg_map.physical_reg;
-}
-
-std::string X86_64CodeGenerator::getPhysicalRegister(Register virt_reg) {
-    for (const auto& reg_map : register_allocation) {
-        if (reg_map.virtual_reg == virt_reg) {
-            return reg_map.physical_reg;
+    void generateBinaryOpCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 2) {
+            std::string left_op = getOperandString(instr.operands[0]);
+            std::string right_op = getOperandString(instr.operands[1]);
+            
+            code << "    " << opcode_map[instr.op_code] << " " << dst_reg << ", " << left_op << "\n";
+            code << "    " << opcode_map[instr.op_code] << " " << dst_reg << ", " << right_op << "\n";
         }
     }
     
-    // If not found, return default register
-    return allocateRegister(virt_reg);
+    void generateDivModCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 2) {
+            std::string divisor_op = getOperandString(instr.operands[1]);
+            
+            // Setup for division: dividend in rax, divisor in specified register
+            code << "    mov rax, " << getOperandString(instr.operands[0]) << "\n";
+            code << "    mov rcx, " << divisor_op << "\n";
+            code << "    cdq\n"; // Sign extend eax into edx
+            code << "    idiv rcx\n";
+            
+            if (instr.op_code == OP_DIV) {
+                code << "    mov " << dst_reg << ", rax\n"; // Quotient
+            } else { // OP_MOD
+                code << "    mov " << dst_reg << ", rdx\n"; // Remainder
+            }
+        }
+    }
+    
+    void generateComparisonCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg, BasicBlockId bb_id) {
+        if (instr.operands.size() >= 2) {
+            std::string left_op = getOperandString(instr.operands[0]);
+            std::string right_op = getOperandString(instr.operands[1]);
+            
+            code << "    cmp " << left_op << ", " << right_op << "\n";
+            
+            // Set result based on comparison
+            std::string set_instr;
+            switch (instr.op_code) {
+                case OP_EQ: set_instr = "sete"; break;
+                case OP_NEQ: set_instr = "setne"; break;
+                case OP_LT: set_instr = "setl"; break;
+                case OP_LTE: set_instr = "setle"; break;
+                case OP_GT: set_instr = "setg"; break;
+                case OP_GTE: set_instr = "setge"; break;
+                default: set_instr = "sete";
+            }
+            
+            code << "    " << set_instr << " al\n";
+            code << "    movzx " << dst_reg << ", al\n";
+        }
+    }
+    
+    void generateNotCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 1) {
+            std::string op = getOperandString(instr.operands[0]);
+            code << "    mov " << dst_reg << ", " << op << "\n";
+            code << "    not " << dst_reg << "\n";
+        }
+    }
+    
+    void generateLoadCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 1) {
+            const Operand& mem_op = instr.operands[0];
+            if (mem_op.type == MEMORY) {
+                std::string base_reg = getX86Register(mem_op.value.mem.base);
+                int offset = mem_op.value.mem.offset;
+                code << "    mov " << dst_reg << ", [" << base_reg << " + " << offset << "]\n";
+            }
+        }
+    }
+    
+    void generateStoreCode(std::stringstream& code, const Instruction& instr) {
+        if (instr.operands.size() >= 2) {
+            const Operand& mem_op = instr.operands[0];
+            const Operand& value_op = instr.operands[1];
+            
+            if (mem_op.type == MEMORY) {
+                std::string base_reg = getX86Register(mem_op.value.mem.base);
+                int offset = mem_op.value.mem.offset;
+                std::string value_str = getOperandString(value_op);
+                code << "    mov [" << base_reg << " + " << offset << "], " << value_str << "\n";
+            }
+        }
+    }
+    
+    void generateJumpCode(std::stringstream& code, const Instruction& instr) {
+        if (instr.operands.size() >= 1) {
+            const Operand& target_op = instr.operands[0];
+            if (target_op.type == BASIC_BLOCK) {
+                code << "    jmp .L" << target_op.value.bb << "\n";
+            }
+        }
+    }
+    
+    void generateBranchCode(std::stringstream& code, const Instruction& instr, BasicBlockId bb_id) {
+        if (instr.operands.size() >= 3) {
+            const Operand& cond_op = instr.operands[0];
+            const Operand& true_op = instr.operands[1];
+            const Operand& false_op = instr.operands[2];
+            
+            std::string cond_str = getOperandString(cond_op);
+            
+            code << "    cmp " << cond_str << ", 0\n";
+            code << "    je .L" << false_op.value.bb << "\n";
+            code << "    jmp .L" << true_op.value.bb << "\n";
+        }
+    }
+    
+    void generateCallCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 1) {
+            // Pass arguments (simplified - first 6 args in registers)
+            for (size_t i = 1; i < instr.operands.size() && i <= 6; ++i) {
+                std::string arg_reg = getX86Register(static_cast<Register>(i - 1));
+                std::string arg_val = getOperandString(instr.operands[i]);
+                code << "    mov " << arg_reg << ", " << arg_val << "\n";
+            }
+            
+            // Call function
+            const Operand& func_op = instr.operands[0];
+            if (func_op.type == FUNCTION) {
+                // In real implementation, this would use function name
+                code << "    call func" << func_op.value.func << "\n";
+            } else {
+                // Indirect call
+                std::string func_ptr = getOperandString(func_op);
+                code << "    call " << func_ptr << "\n";
+            }
+            
+            // Store return value
+            if (instr.dst != -1) {
+                code << "    mov " << dst_reg << ", rax\n";
+            }
+        }
+    }
+    
+    void generateReturnCode(std::stringstream& code, const Instruction& instr) {
+        if (instr.operands.size() >= 1) {
+            std::string ret_val = getOperandString(instr.operands[0]);
+            code << "    mov rax, " << ret_val << "\n";
+        }
+        code << "    jmp .exit\n";
+    }
+    
+    void generateConstCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 1) {
+            const Operand& const_op = instr.operands[0];
+            if (const_op.type == IMMEDIATE) {
+                code << "    mov " << dst_reg << ", " << const_op.value.imm << "\n";
+            }
+        }
+    }
+    
+    void generateAllocCode(std::stringstream& code, const Instruction& instr, const std::string& dst_reg) {
+        if (instr.operands.size() >= 1) {
+            std::string size_str = getOperandString(instr.operands[0]);
+            
+            // Simplified memory allocation using brk system call
+            code << "    # Memory allocation for " << size_str << " bytes\n";
+            code << "    mov rax, 12\n"; // brk syscall
+            code << "    mov rdi, 0\n"; // Get current break
+            code << "    syscall\n";
+            code << "    mov " << dst_reg << ", rax\n";
+            code << "    add rax, " << size_str << "\n";
+            code << "    mov rdi, rax\n";
+            code << "    mov rax, 12\n";
+            code << "    syscall\n";
+        }
+    }
+    
+    void generateFreeCode(std::stringstream& code, const Instruction& instr) {
+        if (instr.operands.size() >= 1) {
+            std::string ptr_str = getOperandString(instr.operands[0]);
+            code << "    # Free memory at " << ptr_str << "\n";
+            // In real implementation, this would manage a free list
+        }
+    }
+    
+    void generateEntryPoint(std::stringstream& code, const Module& module) {
+        code << "# Entry point\n";
+        code << "_start:\n";
+        
+        // Call main function if it exists
+        bool has_main = false;
+        for (const auto& func : module.functions) {
+            if (func.name == "main") {
+                has_main = true;
+                code << "    call main\n";
+                break;
+            }
+        }
+        
+        if (!has_main && !module.functions.empty()) {
+            // Call first function
+            code << "    call " << module.functions[0].name << "\n";
+        }
+        
+        // Exit program
+        code << "    mov rax, 60\n"; // exit syscall
+        code << "    mov rdi, 0\n"; // exit code 0
+        code << "    syscall\n";
+    }
+    
+    std::string getX86Register(Register reg) {
+        auto it = register_map.find(reg);
+        if (it != register_map.end()) {
+            return it->second;
+        }
+        
+        // For registers beyond our mapping, use stack locations
+        int offset = (reg - register_map.size()) * 8;
+        return "[rbp - " + std::to_string(offset + 8) + "]";
+    }
+    
+    std::string getOperandString(const Operand& op) {
+        switch (op.type) {
+            case REGISTER:
+                return getX86Register(op.value.reg);
+            case IMMEDIATE:
+                return std::to_string(op.value.imm);
+            case BASIC_BLOCK:
+                return ".L" + std::to_string(op.value.bb);
+            case FUNCTION:
+                return "func" + std::to_string(op.value.func);
+            case MEMORY:
+                return "[" + getX86Register(op.value.mem.base) + " + " + 
+                       std::to_string(op.value.mem.offset) + "]";
+            default:
+                return "unknown";
+        }
+    }
+};
+
+// Factory function to create x86-64 code generator
+std::unique_ptr<CodeGenerator> createX86_64CodeGenerator() {
+    return std::make_unique<X86_64CodeGenerator>();
 }
 
 } // namespace ir
-
 } // namespace tang

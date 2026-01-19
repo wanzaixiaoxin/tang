@@ -183,6 +183,26 @@ public:
     std::vector<std::shared_ptr<Stmt>> body;
 };
 
+// Match statement (pattern matching)
+class MatchStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> expr;
+    std::vector<std::pair<std::shared_ptr<Expr>, std::vector<std::shared_ptr<Stmt>>>> cases;
+};
+
+// Generic type parameter
+class TypeParam : public ASTNode {
+public:
+    std::string name;
+    std::shared_ptr<Type> constraint;
+};
+
+// Generic function declaration
+class GenericFunctionDecl : public FunctionDecl {
+public:
+    std::vector<std::shared_ptr<TypeParam>> type_params;
+};
+
 // Function declaration
 class FunctionDecl : public ASTNode {
 public:

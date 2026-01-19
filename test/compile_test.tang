@@ -1,0 +1,27 @@
+// Simple test program for Tang compiler
+
+// Simple function that adds two numbers
+func add(a: int, b: int) -> int {
+    return a + b;
+}
+
+// Main function
+func main() -> int {
+    let x = 10;
+    let y = 20;
+    let result = add(x, y);
+    
+    // Simple if statement
+    if result > 25 {
+        return result;
+    } else {
+        return 0;
+    }
+}
+
+// Async function example
+async func async_add(a: int, b: int) -> int {
+    let sum = a + b;
+    yield sum; // Simulate async operation
+    return sum;
+}

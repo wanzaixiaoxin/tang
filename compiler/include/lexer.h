@@ -24,6 +24,7 @@ enum TokenType {
     KEYWORD_OK,
     KEYWORD_ERR,
     KEYWORD_RESULT,
+    KEYWORD_MATCH,
     
     // Types
     TYPE_INT,
@@ -64,6 +65,8 @@ enum TokenType {
     SEP_ARROW,
     SEP_DOT,
     SEP_DOT_DOT,
+    SEP_LT,
+    SEP_GT,
     
     // Identifiers and literals
     IDENTIFIER,

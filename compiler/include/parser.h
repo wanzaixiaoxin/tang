@@ -16,6 +16,7 @@ public:
 private:
     // 辅助方法
     Token peek() const;
+    Token peek(int offset) const;
     Token advance();
     bool match(TokenType type);
     bool check(TokenType type) const;
@@ -47,6 +48,12 @@ private:
     
     // 解析函数
     std::shared_ptr<FunctionDecl> parseFunctionDecl();
+    
+    // 解析匹配语句
+    std::shared_ptr<MatchStmt> parseMatchStmt();
+    
+    // 解析泛型参数
+    std::vector<std::shared_ptr<TypeParam>> parseTypeParams();
     
     // 错误处理
     void error(const Token& token, const std::string& message);

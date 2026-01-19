@@ -151,6 +151,7 @@ TokenType Lexer::checkKeyword(const std::string& identifier) {
         {"Ok", KEYWORD_OK},
         {"Err", KEYWORD_ERR},
         {"Result", KEYWORD_RESULT},
+        {"match", KEYWORD_MATCH},
         {"int", TYPE_INT},
         {"float", TYPE_FLOAT},
         {"bool", TYPE_BOOL},
@@ -234,13 +235,13 @@ Token Lexer::getNextToken() {
                 if (match('=')) {
                     return Token{OP_LTE, "<=", line, start_column};
                 }
-                return Token{OP_LT, "<", line, start_column};
+                return Token{SEP_LT, "<", line, start_column};
             case '>':
                 advance();
                 if (match('=')) {
                     return Token{OP_GTE, ">=", line, start_column};
                 }
-                return Token{OP_GT, ">", line, start_column};
+                return Token{SEP_GT, ">", line, start_column};
             case '&':
                 advance();
                 if (match('&')) {

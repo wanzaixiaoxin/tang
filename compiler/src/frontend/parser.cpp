@@ -16,6 +16,20 @@ Token Parser::peek() const {
     return current_token;
 }
 
+Token Parser::peek(int offset) const {
+    // 保存当前状态
+    Lexer temp_lexer = lexer;
+    Token temp_token = current_token;
+    
+    // 临时向前查看
+    Parser temp_parser(*const_cast<Lexer*>(&lexer));
+    for (int i = 0; i < offset; i++) {
+        temp_parser.advance();
+    }
+    
+    return temp_parser.peek();
+}
+
 Token Parser::advance() {
     current_token = lexer.getNextToken();
     return current_token;
@@ -382,12 +396,14 @@ std::shared_ptr<Stmt> Parser::parseStmt() {
         return parseWhileStmt();
     } else if (check(KEYWORD_FOR)) {
         return parseForStmt();
+    } else if (check(KEYWORD_MATCH)) {
+        return parseMatchStmt();
     } else if (check(SEP_LBRACE)) {
-        // 语句块作为单个语句
-        auto stmt_block = parseStmtBlock();
-        // 将语句块转换为表达式语句（如果需要）
-        // 这里简化处理，实际可能需要更复杂的结构
-        return nullptr;
+        // 语句块
+        auto stmts = parseStmtBlock();
+        // 将语句块包装为BlockStmt（需要添加这个AST节点）
+        // 这里简化处理，返回第一个语句
+        return !stmts.empty() ? stmts[0] : nullptr;
     } else {
         // 表达式语句
         auto expr = parseExpr();
@@ -638,6 +654,70 @@ std::shared_ptr<FunctionDecl> Parser::parseFunctionDecl() {
     fn_decl->body = parseStmtBlock();
     
     return fn_decl;
+}
+
+std::shared_ptr<MatchStmt> Parser::parseMatchStmt() {
+    advance(); // KEYWORD_MATCH (需要先在lexer中添加这个关键字)
+    
+    auto match_stmt = std::make_shared<MatchStmt>();
+    
+    // 解析匹配表达式
+    consume(SEP_LPAREN, "Expected '(' after match");
+    match_stmt->expr = parseExpr();
+    consume(SEP_RPAREN, "Expected ')' after match expression");
+    
+    // 解析匹配分支
+    consume(SEP_LBRACE, "Expected '{' after match");
+    
+    while (!check(SEP_RBRACE) && !check(END_OF_FILE)) {
+        // 解析模式
+        auto pattern = parseExpr();
+        
+        consume(SEP_ARROW, "Expected '=>' after pattern");
+        
+        // 解析分支体
+        std::vector<std::shared_ptr<Stmt>> branch_body;
+        if (match(SEP_LBRACE)) {
+            branch_body = parseStmtBlock();
+        } else {
+            auto stmt = parseStmt();
+            if (stmt) {
+                branch_body.push_back(stmt);
+            }
+        }
+        
+        match_stmt->cases.emplace_back(pattern, branch_body);
+        
+        if (!match(SEP_COMMA)) {
+            break;
+        }
+    }
+    
+    consume(SEP_RBRACE, "Expected '}' at end of match statement");
+    return match_stmt;
+}
+
+std::vector<std::shared_ptr<TypeParam>> Parser::parseTypeParams() {
+    std::vector<std::shared_ptr<TypeParam>> type_params;
+    
+    if (match(SEP_LT)) {
+        do {
+            auto type_param = std::make_shared<TypeParam>();
+            consume(IDENTIFIER, "Expected type parameter name");
+            type_param->name = current_token.lexeme;
+            
+            // 检查约束
+            if (match(SEP_COLON)) {
+                type_param->constraint = parseType();
+            }
+            
+            type_params.push_back(type_param);
+        } while (match(SEP_COMMA));
+        
+        consume(SEP_GT, "Expected '>' after type parameters");
+    }
+    
+    return type_params;
 }
 
 } // namespace tang
