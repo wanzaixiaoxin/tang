@@ -368,25 +368,29 @@ std::shared_ptr<Type> SemanticAnalyzer::analyzeBinaryExpr(const std::shared_ptr<
             }
             
             // 返回布尔类型
-            auto bool_type = std::make_shared<Type>();
-            bool_type->kind = Type::BOOL;
-            bool_type->name = "bool";
-            return bool_type;
+            {
+                auto bool_type = std::make_shared<Type>();
+                bool_type->kind = Type::BOOL;
+                bool_type->name = "bool";
+                return bool_type;
+            }
             
         case BinaryExpr::AND:
         case BinaryExpr::OR:
             // 逻辑运算：需要布尔类型
-            auto bool_type = std::make_shared<Type>();
-            bool_type->kind = Type::BOOL;
-            bool_type->name = "bool";
-            
-            if (!isTypeCompatible(bool_type, left_type)) {
-                error(binary_expr->left->position, "Left operand must be boolean");
+            {
+                auto bool_type = std::make_shared<Type>();
+                bool_type->kind = Type::BOOL;
+                bool_type->name = "bool";
+                
+                if (!isTypeCompatible(bool_type, left_type)) {
+                    error(binary_expr->left->position, "Left operand must be boolean");
+                }
+                if (!isTypeCompatible(bool_type, right_type)) {
+                    error(binary_expr->right->position, "Right operand must be boolean");
+                }
+                return bool_type;
             }
-            if (!isTypeCompatible(bool_type, right_type)) {
-                error(binary_expr->right->position, "Right operand must be boolean");
-            }
-            return bool_type;
     }
     
     error(binary_expr->position, "Unsupported binary operation");
@@ -399,14 +403,16 @@ std::shared_ptr<Type> SemanticAnalyzer::analyzeUnaryExpr(const std::shared_ptr<U
     switch (unary_expr->op) {
         case UnaryExpr::NOT:
             // 逻辑非：需要布尔类型
-            auto bool_type = std::make_shared<Type>();
-            bool_type->kind = Type::BOOL;
-            bool_type->name = "bool";
-            
-            if (!isTypeCompatible(bool_type, expr_type)) {
-                error(unary_expr->expr->position, "Operand must be boolean for NOT operation");
+            {
+                auto bool_type = std::make_shared<Type>();
+                bool_type->kind = Type::BOOL;
+                bool_type->name = "bool";
+                
+                if (!isTypeCompatible(bool_type, expr_type)) {
+                    error(unary_expr->expr->position, "Operand must be boolean for NOT operation");
+                }
+                return bool_type;
             }
-            return bool_type;
             
         case UnaryExpr::NEG:
             // 算术负号：需要数值类型
