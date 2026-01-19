@@ -40,12 +40,12 @@ public:
             // 4. IR generation
             std::cout << "[4/5] IR generation..." << std::endl;
             auto ir_module = ir::generateIR(ast_module);
-            std::cout << "    Generated IR with " << ir_module.functions.size() << " functions" << std::endl;
+            std::cout << "    Generated IR module" << std::endl;
             
             // 5. Code generation
             std::cout << "[5/5] Code generation..." << std::endl;
             auto code_generator = ir::createX86_64CodeGenerator();
-            code_generator->generateCode(ir_module, output_file);
+            code_generator->generateCode(*ir_module, output_file);
             std::cout << "    Generated x86-64 assembly to: " << output_file << std::endl;
             
             std::cout << "=== Compilation successful! ===" << std::endl;
@@ -60,7 +60,7 @@ public:
     void printTokens(const std::string& source_code) {
         auto tokens = lexer->tokenize(source_code);
         for (const auto& token : tokens) {
-            std::cout << "[" << token.type << "] " << token.value << std::endl;
+            std::cout << "[" << token.type << "] " << token.lexeme << std::endl;
         }
     }
     
@@ -85,7 +85,7 @@ public:
         semantic_analyzer->analyzeModule(ast_module);
         auto ir_module = ir::generateIR(ast_module);
         
-        ir::printIR(ir_module);
+        ir::printIR(*ir_module);
     }
     
 private:

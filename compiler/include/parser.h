@@ -10,6 +10,9 @@ class Parser {
 public:
     explicit Parser(Lexer& lexer);
     
+    // 设置tokens (用于测试)
+    void setTokens(const std::vector<Token>& tokens);
+    
     // 解析整个模块
     std::shared_ptr<Module> parseModule();
     

@@ -294,4 +294,17 @@ Token Lexer::getNextToken() {
     }
 }
 
+std::vector<Token> Lexer::tokenize(const std::string& source) {
+    std::vector<Token> tokens;
+    Lexer lexer(source);
+    
+    Token token;
+    do {
+        token = lexer.getNextToken();
+        tokens.push_back(token);
+    } while (token.type != END_OF_FILE);
+    
+    return tokens;
+}
+
 } // namespace tang

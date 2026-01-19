@@ -151,6 +151,12 @@ public:
     std::shared_ptr<Expr> expr;
 };
 
+// Yield statement (for async functions)
+class YieldStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> expr;
+};
+
 // If statement
 class IfStmt : public Stmt {
 public:
@@ -197,12 +203,6 @@ public:
     std::shared_ptr<Type> constraint;
 };
 
-// Generic function declaration
-class GenericFunctionDecl : public FunctionDecl {
-public:
-    std::vector<std::shared_ptr<TypeParam>> type_params;
-};
-
 // Function declaration
 class FunctionDecl : public ASTNode {
 public:
@@ -211,6 +211,12 @@ public:
     std::shared_ptr<Type> return_type;
     std::vector<std::pair<std::string, std::shared_ptr<Type>>> params;
     std::vector<std::shared_ptr<Stmt>> body;
+};
+
+// Generic function declaration
+class GenericFunctionDecl : public FunctionDecl {
+public:
+    std::vector<std::shared_ptr<TypeParam>> type_params;
 };
 
 // Module (entire file)

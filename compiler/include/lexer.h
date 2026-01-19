@@ -92,9 +92,13 @@ struct Token {
 class Lexer {
 public:
     explicit Lexer(const std::string& source);
+    Lexer() = default; // Default constructor for testing
     
     // Get next token
     Token getNextToken();
+    
+    // Tokenize entire source code
+    std::vector<Token> tokenize(const std::string& source);
     
 private:
     // Helper methods

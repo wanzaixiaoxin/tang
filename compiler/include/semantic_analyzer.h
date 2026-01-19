@@ -21,7 +21,7 @@ public:
     bool hasFunction(const std::string& name) const;
     std::shared_ptr<FunctionDecl> getFunction(const std::string& name) const;
     
-private:
+public:
     struct VariableInfo {
         std::shared_ptr<Type> type;
         bool is_const;
@@ -37,6 +37,7 @@ public:
     SemanticAnalyzer();
     
     void analyze(const std::shared_ptr<Module>& module);
+    void analyzeModule(const std::shared_ptr<Module>& module);
     
 private:
     std::shared_ptr<SymbolTable> current_scope;
@@ -44,9 +45,6 @@ private:
     // Type checking helper methods
     bool isTypeCompatible(const std::shared_ptr<Type>& lhs, const std::shared_ptr<Type>& rhs) const;
     bool isTypeEqual(const std::shared_ptr<Type>& lhs, const std::shared_ptr<Type>& rhs) const;
-    
-    // Analysis methods
-    void analyzeModule(const std::shared_ptr<Module>& module);
     void analyzeFunction(const std::shared_ptr<FunctionDecl>& func);
     void analyzeStmt(const std::shared_ptr<Stmt>& stmt);
     void analyzeVarDecl(const std::shared_ptr<VarDeclStmt>& var_decl);
