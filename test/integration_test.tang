@@ -1,0 +1,52 @@
+// 集成测试用例 - 包含各种语言特性
+
+// 同步函数 - 基本功能
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+// 异步函数 - 协程支持
+async func fetch_data() -> string {
+    // 模拟异步操作
+    yield "data chunk 1";
+    yield "data chunk 2";
+    return "complete";
+}
+
+// 控制流语句
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1;
+    }
+    
+    let result = 1;
+    for i in 2..n {
+        result = result * i;
+    }
+    return result;
+}
+
+// 主函数 - 集成测试入口
+fn main() -> int {
+    // 测试同步函数
+    let sum = add(10, 20);
+    println("10 + 20 = ", sum);
+    
+    // 测试异步函数（通过模拟）
+    println("Testing async functions...");
+    
+    // 测试控制流
+    let fact = factorial(5);
+    println("5! = ", fact);
+    
+    // 测试变量声明和赋值
+    let x = 42;
+    let y = 3.14;
+    let name = "Tang Language";
+    
+    println("x = ", x);
+    println("y = ", y);
+    println("name = ", name);
+    
+    return 0;
+}

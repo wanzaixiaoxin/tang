@@ -67,6 +67,7 @@ bld/
 .idea/
 .vscode/
 .trae/
+.codebuddy/
 *.swp
 *.swo
 *~
