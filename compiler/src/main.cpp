@@ -11,10 +11,10 @@ namespace tang {
 
 class Compiler {
 public:
-    Compiler() {
-        lexer = std::make_unique<Lexer>();
-        parser = std::make_unique<Parser>();
-        semantic_analyzer = std::make_unique<SemanticAnalyzer>();
+    Compiler()
+        : semantic_analyzer(std::make_unique<SemanticAnalyzer>())
+    {
+        // Parser和Lexer在编译时创建，不是在构造时
     }
     
     bool compile(const std::string& source_code, const std::string& output_file) {
@@ -23,13 +23,14 @@ public:
             
             // 1. Lexical analysis
             std::cout << "[1/5] Lexical analysis..." << std::endl;
-            auto tokens = lexer->tokenize(source_code);
+            Lexer temp_lexer(source_code);
+            auto tokens = temp_lexer.tokenize(source_code);
             std::cout << "    Generated " << tokens.size() << " tokens" << std::endl;
             
             // 2. Syntax analysis
             std::cout << "[2/5] Syntax analysis..." << std::endl;
-            parser->setTokens(tokens);
-            auto ast_module = parser->parseModule();
+            Parser parser(tokens); // 使用tokens构造Parser
+            auto ast_module = parser.parseModule();
             std::cout << "    Parsed " << ast_module->functions.size() << " functions" << std::endl;
             
             // 3. Semantic analysis
@@ -39,13 +40,13 @@ public:
             
             // 4. IR generation
             std::cout << "[4/5] IR generation..." << std::endl;
-            auto ir_module = ir::generateIR(ast_module);
+            auto ir_module_obj = ir::generateIR(ast_module);
             std::cout << "    Generated IR module" << std::endl;
             
             // 5. Code generation
             std::cout << "[5/5] Code generation..." << std::endl;
             auto code_generator = ir::createX86_64CodeGenerator();
-            code_generator->generateCode(*ir_module, output_file);
+            code_generator->generateCode(ir_module_obj, output_file);
             std::cout << "    Generated x86-64 assembly to: " << output_file << std::endl;
             
             std::cout << "=== Compilation successful! ===" << std::endl;
@@ -58,16 +59,18 @@ public:
     }
     
     void printTokens(const std::string& source_code) {
-        auto tokens = lexer->tokenize(source_code);
+        Lexer temp_lexer(source_code);
+        auto tokens = temp_lexer.tokenize(source_code);
         for (const auto& token : tokens) {
             std::cout << "[" << token.type << "] " << token.lexeme << std::endl;
         }
     }
     
     void printAST(const std::string& source_code) {
-        auto tokens = lexer->tokenize(source_code);
-        parser->setTokens(tokens);
-        auto ast_module = parser->parseModule();
+        Lexer temp_lexer(source_code);
+        auto tokens = temp_lexer.tokenize(source_code);
+        Parser parser(tokens);
+        auto ast_module = parser.parseModule();
         
         // Simple AST printer
         for (const auto& func : ast_module->functions) {
@@ -79,18 +82,17 @@ public:
     }
     
     void printIR(const std::string& source_code) {
-        auto tokens = lexer->tokenize(source_code);
-        parser->setTokens(tokens);
-        auto ast_module = parser->parseModule();
+        Lexer temp_lexer(source_code);
+        auto tokens = temp_lexer.tokenize(source_code);
+        Parser parser(tokens);
+        auto ast_module = parser.parseModule();
         semantic_analyzer->analyzeModule(ast_module);
-        auto ir_module = ir::generateIR(ast_module);
+        auto ir_module_obj = ir::generateIR(ast_module);
         
-        ir::printIR(*ir_module);
+        ir::printIR(ir_module_obj);
     }
     
 private:
-    std::unique_ptr<Lexer> lexer;
-    std::unique_ptr<Parser> parser;
     std::unique_ptr<SemanticAnalyzer> semantic_analyzer;
 };
 

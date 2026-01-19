@@ -194,14 +194,10 @@ public:
     virtual void generateCode(const Module& module, const std::string& output_file) = 0;
 };
 
-// IR generation functions
-std::shared_ptr<Module> generateIR(const std::shared_ptr<tang::Module>& ast);
-
-// Code generator factory function
-std::unique_ptr<CodeGenerator> createX86_64CodeGenerator();
-
-// IR printing utility
-void printIR(const Module& module);
+// Function declarations will be in implementation files
+// Module generateIR(const std::shared_ptr<tang::Module>& ast);
+// void printIR(const Module& module);
+// std::unique_ptr<CodeGenerator> createX86_64CodeGenerator();
 
 } // namespace ir
 

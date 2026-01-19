@@ -1,17 +1,27 @@
 cmake_minimum_required(VERSION 3.16)
 
-# 主入口文件（使用简化版本）
-set(MAIN_SOURCE "src/simple_main.cpp")
+# 主入口文件
+set(MAIN_SOURCE "src/main.cpp")
 
 # 前端源文件
 set(LEXER_SOURCE "src/frontend/lexer.cpp")
+set(PARSER_SOURCE "src/frontend/parser.cpp")
 set(SEMANTIC_SOURCE "src/frontend/semantic_analyzer.cpp")
 
-# 编译器可执行文件 - 编译简化版本
+# IR源文件
+set(IR_SOURCE "src/ir/ir_gen.cpp")
+
+# 后端源文件
+set(BACKEND_SOURCE "src/backend/x86_64_codegen.cpp")
+
+# 编译器可执行文件
 add_executable(tangc
     ${MAIN_SOURCE}
     ${LEXER_SOURCE}
+    ${PARSER_SOURCE}
     ${SEMANTIC_SOURCE}
+    ${IR_SOURCE}
+    ${BACKEND_SOURCE}
 )
 
 # 头文件路径

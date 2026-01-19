@@ -126,6 +126,43 @@ public:
     std::shared_ptr<Expr> index;
 };
 
+// Member access expression (e.g., obj.field)
+class MemberAccessExpr : public Expr {
+public:
+    std::shared_ptr<Expr> object;
+    std::string member_name;
+};
+
+// New expression (for object creation)
+class NewExpr : public Expr {
+public:
+    std::string type_name;
+    std::shared_ptr<Expr> size;  // Size for array allocation
+    std::vector<std::shared_ptr<Expr>> args;
+};
+
+// Await expression (for async/await)
+class AwaitExpr : public Expr {
+public:
+    std::shared_ptr<Expr> future;  // Future/promise to await
+};
+
+// Async read expression
+class AsyncReadExpr : public Expr {
+public:
+    std::shared_ptr<Expr> fd;      // File descriptor
+    std::shared_ptr<Expr> buf;     // Buffer to read into (named buf for compatibility)
+    std::shared_ptr<Expr> size;    // Size to read
+};
+
+// Async write expression
+class AsyncWriteExpr : public Expr {
+public:
+    std::shared_ptr<Expr> fd;           // File descriptor (named fd for compatibility)
+    std::shared_ptr<Expr> buf;          // Buffer to write (named buf for compatibility)
+    std::shared_ptr<Expr> size;         // Size to write (named size for compatibility)
+};
+
 // Statement base class
 class Stmt : public ASTNode {
 };
@@ -155,6 +192,31 @@ public:
 class YieldStmt : public Stmt {
 public:
     std::shared_ptr<Expr> expr;
+};
+
+// Coroutine creation statement
+class CoroCreateStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> func_expr;
+    std::string var_name;
+};
+
+// Coroutine resume statement
+class CoroResumeStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> coro_expr;
+};
+
+// Coroutine destroy statement
+class CoroDestroyStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> coro_expr;
+};
+
+// Resource destruction statement
+class DestroyStmt : public Stmt {
+public:
+    std::shared_ptr<Expr> resource_expr;
 };
 
 // If statement

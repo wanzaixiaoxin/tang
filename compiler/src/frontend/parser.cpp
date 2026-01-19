@@ -7,9 +7,18 @@
 namespace tang {
 
 Parser::Parser(Lexer& lexer)
-    : lexer(lexer)
+    : lexer_ptr(&lexer), token_index(0)
 {
     advance(); // 初始化为第一个标记
+}
+
+// 使用tokens的构造函数
+Parser::Parser(const std::vector<Token>& tokens)
+    : lexer_ptr(nullptr), tokens(tokens), token_index(0)
+{
+    if (!tokens.empty()) {
+        current_token = tokens[0];
+    }
 }
 
 Token Parser::peek() const {
@@ -17,21 +26,31 @@ Token Parser::peek() const {
 }
 
 Token Parser::peek(int offset) const {
-    // 保存当前状态
-    Lexer temp_lexer = lexer;
-    Token temp_token = current_token;
-    
-    // 临时向前查看
-    Parser temp_parser(*const_cast<Lexer*>(&lexer));
-    for (int i = 0; i < offset; i++) {
-        temp_parser.advance();
+    // 简化实现：只在tokens模式下支持向前查看
+    if (!lexer_ptr) {
+        // tokens模式
+        if (token_index + offset < static_cast<int>(tokens.size())) {
+            return tokens[token_index + offset];
+        }
     }
-    
-    return temp_parser.peek();
+    // lexer模式暂不支持向前查看
+    return current_token;
 }
 
 Token Parser::advance() {
-    current_token = lexer.getNextToken();
+    if (lexer_ptr) {
+        // 使用lexer模式
+        current_token = lexer_ptr->getNextToken();
+    } else {
+        // 使用tokens模式
+        if (token_index < static_cast<int>(tokens.size())) {
+            current_token = tokens[token_index];
+            token_index++;
+        } else {
+            // 到达token序列末尾
+            current_token = Token{END_OF_FILE, "", current_token.line, current_token.column};
+        }
+    }
     return current_token;
 }
 
@@ -73,7 +92,7 @@ std::shared_ptr<Module> Parser::parseModule() {
         } else if (match(KEYWORD_LET) || match(KEYWORD_CONST)) {
             // 解析全局变量声明
             auto var_decl = parseVarDeclStmt();
-            module->global_vars.push_back(var_decl);
+            module->global_vars.push_back(std::dynamic_pointer_cast<VarDeclStmt>(var_decl));
         } else {
             // 无效的顶级声明
             error(current_token, "Expected function or variable declaration");
@@ -160,7 +179,7 @@ std::shared_ptr<Expr> Parser::parseLogicalOrExpr() {
     
     while (match(OP_OR)) {
         auto binary_expr = std::make_shared<BinaryExpr>();
-        binary_expr->op = BinaryExpr::OP_OR;
+        binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
         binary_expr->left = expr;
         binary_expr->right = parseLogicalAndExpr();
         expr = binary_expr;
@@ -174,7 +193,7 @@ std::shared_ptr<Expr> Parser::parseLogicalAndExpr() {
     
     while (match(OP_AND)) {
         auto binary_expr = std::make_shared<BinaryExpr>();
-        binary_expr->op = BinaryExpr::OP_AND;
+        binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
         binary_expr->left = expr;
         binary_expr->right = parseEqualityExpr();
         expr = binary_expr;
@@ -189,13 +208,13 @@ std::shared_ptr<Expr> Parser::parseEqualityExpr() {
     while (true) {
         if (match(OP_EQ)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_EQ;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseComparisonExpr();
             expr = binary_expr;
         } else if (match(OP_NEQ)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_NEQ;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseComparisonExpr();
             expr = binary_expr;
@@ -213,25 +232,25 @@ std::shared_ptr<Expr> Parser::parseComparisonExpr() {
     while (true) {
         if (match(OP_LT)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_LT;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseAdditiveExpr();
             expr = binary_expr;
         } else if (match(OP_LTE)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_LTE;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseAdditiveExpr();
             expr = binary_expr;
         } else if (match(OP_GT)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_GT;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseAdditiveExpr();
             expr = binary_expr;
         } else if (match(OP_GTE)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_GTE;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseAdditiveExpr();
             expr = binary_expr;
@@ -249,13 +268,13 @@ std::shared_ptr<Expr> Parser::parseAdditiveExpr() {
     while (true) {
         if (match(OP_ADD)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_ADD;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseMultiplicativeExpr();
             expr = binary_expr;
         } else if (match(OP_SUB)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_SUB;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseMultiplicativeExpr();
             expr = binary_expr;
@@ -273,19 +292,19 @@ std::shared_ptr<Expr> Parser::parseMultiplicativeExpr() {
     while (true) {
         if (match(OP_MUL)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_MUL;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseUnaryExpr();
             expr = binary_expr;
         } else if (match(OP_DIV)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_DIV;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseUnaryExpr();
             expr = binary_expr;
         } else if (match(OP_MOD)) {
             auto binary_expr = std::make_shared<BinaryExpr>();
-            binary_expr->op = BinaryExpr::OP_MOD;
+            binary_expr->op = static_cast<BinaryExpr::Op>(current_token.type);
             binary_expr->left = expr;
             binary_expr->right = parseUnaryExpr();
             expr = binary_expr;
@@ -300,12 +319,12 @@ std::shared_ptr<Expr> Parser::parseMultiplicativeExpr() {
 std::shared_ptr<Expr> Parser::parseUnaryExpr() {
     if (match(OP_NOT)) {
         auto unary_expr = std::make_shared<UnaryExpr>();
-        unary_expr->op = UnaryExpr::OP_NOT;
+        unary_expr->op = static_cast<UnaryExpr::Op>(current_token.type);
         unary_expr->expr = parseUnaryExpr();
         return unary_expr;
     } else if (match(OP_SUB)) {
         auto unary_expr = std::make_shared<UnaryExpr>();
-        unary_expr->op = UnaryExpr::OP_NEG;
+        unary_expr->op = static_cast<UnaryExpr::Op>(current_token.type);
         unary_expr->expr = parseUnaryExpr();
         return unary_expr;
     }
@@ -718,6 +737,15 @@ std::vector<std::shared_ptr<TypeParam>> Parser::parseTypeParams() {
     }
     
     return type_params;
+}
+
+void Parser::setTokens(const std::vector<Token>& tokens) {
+    this->tokens = tokens;
+    this->lexer_ptr = nullptr; // 切换到tokens模式
+    this->token_index = 0;
+    if (!tokens.empty()) {
+        current_token = tokens[0];
+    }
 }
 
 } // namespace tang

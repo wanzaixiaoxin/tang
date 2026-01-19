@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include "../../include/ast.h"
 #include "../../include/ir.h"
 
@@ -178,8 +179,15 @@ void IROptimizer::peepholeOptimization(Module& module, Function& func) {
     // Simplified processing, actual implementation needs more complex pattern matching
 }
 
+// Forward declaration for IRGenContext
+struct IRGenContext;
+
+// Expression to IR conversion
+Register generateExprIR(IRGenContext& context, const std::shared_ptr<tang::Expr>& expr);
+
 // IR generation context
 struct IRGenContext {
+public:
     IRGenerator& generator;
     Module& module;
     FunctionId current_func_id;
@@ -190,9 +198,6 @@ struct IRGenContext {
         : generator(gen), module(mod), current_func_id(func_id), current_bb(bb_id) {}
 };
 
-// Expression to IR conversion
-Register generateExprIR(IRGenContext& context, const std::shared_ptr<tang::Expr>& expr);
-
 // Statement to IR conversion
 void generateStmtIR(IRGenContext& context, const std::shared_ptr<tang::Stmt>& stmt);
 
@@ -202,8 +207,12 @@ void generateFunctionIR(IRGenContext& context, const std::shared_ptr<tang::Funct
 // Async function to IR conversion (state machine)
 void generateAsyncFunctionIR(IRGenContext& context, const std::shared_ptr<tang::FunctionDecl>& func_decl);
 
+// Public API functions
+Module generateIR(const std::shared_ptr<tang::Module>& ast_module);
+void printIR(const Module& module);
+
 // AST to IR conversion function
-Module generateIR(const std::shared_ptr<tang::Module>& ast_module) {
+auto generateIR(const std::shared_ptr<tang::Module>& ast_module) -> Module {
     IRGenerator generator;
     Module ir_module = generator.createModule();
     
@@ -424,45 +433,20 @@ void generateStmtIR(IRGenContext& context, const std::shared_ptr<tang::Stmt>& st
             context.generator.addInstruction(context.module, context.current_func_id, context.current_bb, yield_instr);
         }
         
-    } else if (auto coro_create = std::dynamic_pointer_cast<tang::CoroCreateStmt>(stmt)) {
-        // Coroutine creation statement
-        Register func_reg = generateExprIR(context, coro_create->func_expr);
+    } else if (auto match_stmt = std::dynamic_pointer_cast<tang::MatchStmt>(stmt)) {
+        // Match statement (simplified)
+        Register expr_reg = generateExprIR(context, match_stmt->expr);
         
-        Register result_reg = context.generator.allocateRegister(context.module);
-        
-        std::vector<Operand> create_ops;
-        Operand func_op = context.generator.createRegisterOperand(func_reg);
-        create_ops.push_back(func_op);
-        
-        Instruction create_instr = context.generator.createInstruction(OP_CORO_CREATE, result_reg, create_ops);
-        context.generator.addInstruction(context.module, context.current_func_id, context.current_bb, create_instr);
-        
-        // Store coroutine handle if needed
-        if (!coro_create->var_name.empty()) {
-            context.variable_map[coro_create->var_name] = result_reg;
+        // For simplicity, just evaluate the first matching case
+        if (!match_stmt->cases.empty()) {
+            const auto& first_case = match_stmt->cases[0];
+            
+            // Generate case body
+            for (const auto& case_stmt : first_case.second) {
+                generateStmtIR(context, case_stmt);
+            }
         }
         
-    } else if (auto coro_resume = std::dynamic_pointer_cast<tang::CoroResumeStmt>(stmt)) {
-        // Coroutine resume statement
-        Register coro_reg = generateExprIR(context, coro_resume->coro_expr);
-        
-        std::vector<Operand> resume_ops;
-        Operand coro_op = context.generator.createRegisterOperand(coro_reg);
-        resume_ops.push_back(coro_op);
-        
-        Instruction resume_instr = context.generator.createInstruction(OP_CORO_RESUME, -1, resume_ops);
-        context.generator.addInstruction(context.module, context.current_func_id, context.current_bb, resume_instr);
-        
-    } else if (auto coro_destroy = std::dynamic_pointer_cast<tang::CoroDestroyStmt>(stmt)) {
-        // Coroutine destroy statement
-        Register coro_reg = generateExprIR(context, coro_destroy->coro_expr);
-        
-        std::vector<Operand> destroy_ops;
-        Operand coro_op = context.generator.createRegisterOperand(coro_reg);
-        destroy_ops.push_back(coro_op);
-        
-        Instruction destroy_instr = context.generator.createInstruction(OP_CORO_DESTROY, -1, destroy_ops);
-        context.generator.addInstruction(context.module, context.current_func_id, context.current_bb, destroy_instr);
     }
     // Other statement types can be added here
 }

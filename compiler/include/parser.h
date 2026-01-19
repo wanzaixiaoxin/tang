@@ -16,6 +16,10 @@ public:
     // 解析整个模块
     std::shared_ptr<Module> parseModule();
     
+public:
+    // 使用tokens的构造函数
+    explicit Parser(const std::vector<Token>& tokens);
+    
 private:
     // 辅助方法
     Token peek() const;
@@ -62,7 +66,9 @@ private:
     void error(const Token& token, const std::string& message);
     
     // 状态
-    Lexer& lexer;
+    Lexer* lexer_ptr; // 指针而不是引用，允许nullptr
+    std::vector<Token> tokens; // 存储tokens
+    int token_index; // 当前token索引
     Token current_token;
 };
 
