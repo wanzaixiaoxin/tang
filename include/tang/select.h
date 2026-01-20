@@ -221,34 +221,25 @@ private:
 // Select函数
 template <typename... Cases>
 void select(Cases&&... cases) {
-    constexpr size_t num_cases = sizeof...(Cases);
-    
-    std::vector<size_t> indices(num_cases);
-    std::iota(indices.begin(), indices.end(), 0);
-    
     std::random_device rd;
     std::mt19937 rng(rd());
     
-    auto try_execute_at = [&](size_t idx) -> bool {
-        bool result = false;
-        ([&result, idx, &cases]() {
-            if (!result && idx == sizeof...([&]() { return 0; }())) {
-                if (cases.try_execute()) {
-                    cases.execute_callback();
-                    result = true;
-                }
+    auto try_execute = [&]() -> bool {
+        bool executed = false;
+        ([&]() {
+            if (!executed && cases.try_execute()) {
+                cases.execute_callback();
+                executed = true;
             }
         }(), ...);
-        return result;
+        return executed;
     };
     
-    while (true) {
-        std::shuffle(indices.begin(), indices.end(), rng);
-        for (size_t i = 0; i < num_cases; ++i) {
-            if (try_execute_at(indices[i])) {
-                return;
-            }
-        }
+    if (try_execute()) {
+        return;
+    }
+    
+    while (!try_execute()) {
         std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
 }
