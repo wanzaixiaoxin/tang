@@ -8,6 +8,8 @@
 #include <mutex>
 #include <functional>
 #include <random>
+#include <algorithm>
+#include <numeric>
 
 namespace tang {
 
@@ -219,57 +221,34 @@ private:
 // Select函数
 template <typename... Cases>
 void select(Cases&&... cases) {
-    // 转换为unique_ptr数组
-    std::vector<std::unique_ptr<select_case>> case_ptrs;
-    case_ptrs.reserve(sizeof...(Cases));
+    constexpr size_t num_cases = sizeof...(Cases);
     
-    // 检查是否有默认case
-    bool has_default = false;
+    std::vector<size_t> indices(num_cases);
+    std::iota(indices.begin(), indices.end(), 0);
     
-    // 尝试执行所有case
-    ([&]() {
-        if (cases.type() == select_case_type::default_case) {
-            has_default = true;
-        }
-        
-        if (cases.try_execute()) {
-            cases.execute_callback();
-            // 抛出异常来中断后续case的执行
-            throw std::runtime_error("case executed");
-        }
-    }(), ...);
-    
-    // 如果有默认case，执行默认case
-    if (has_default) {
-        ([&]() {
-            if (cases.type() == select_case_type::default_case) {
-                cases.execute_callback();
-                throw std::runtime_error("default case executed");
-            }
-        }(), ...);
-    }
-    
-    // 没有就绪的case，等待直到有case就绪
-    // 简化实现：这里使用busy waiting，实际应该使用更高效的等待机制
     std::random_device rd;
     std::mt19937 rng(rd());
     
-    while (true) {
-        // 随机打乱case顺序，实现公平调度
-        std::vector<size_t> indices = {0, 1, ..., sizeof...(Cases) - 1};
-        std::shuffle(indices.begin(), indices.end(), rng);
-        
-        // 尝试执行打乱后的case
-        ([&, &indices = indices](size_t i) {
-            auto case_tuple = std::make_tuple(&cases...);
-            auto case_ptr = std::get<i>(case_tuple);
-            if (case_ptr->try_execute()) {
-                case_ptr->execute_callback();
-                throw std::runtime_error("case executed");
+    auto try_execute_at = [&](size_t idx) -> bool {
+        bool result = false;
+        ([&result, idx, &cases]() {
+            if (!result && idx == sizeof...([&]() { return 0; }())) {
+                if (cases.try_execute()) {
+                    cases.execute_callback();
+                    result = true;
+                }
             }
-        }(indices[i]), ...);
-        
-        // 短暂睡眠，避免CPU占用过高
+        }(), ...);
+        return result;
+    };
+    
+    while (true) {
+        std::shuffle(indices.begin(), indices.end(), rng);
+        for (size_t i = 0; i < num_cases; ++i) {
+            if (try_execute_at(indices[i])) {
+                return;
+            }
+        }
         std::this_thread::sleep_for(std::chrono::microseconds(1));
     }
 }

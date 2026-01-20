@@ -4,6 +4,8 @@
 #include <coroutine>
 #include <optional>
 #include <stdexcept>
+#include <functional>
+#include <type_traits>
 
 namespace tang {
 
@@ -222,6 +224,11 @@ private:
 // 辅助函数
 template <typename F, typename... Args>
 task<std::invoke_result_t<F, Args...>> go(F&& f, Args&&... args) {
+    co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+}
+
+template <typename F, typename... Args>
+task<std::invoke_result_t<F, Args...>> spawn(F&& f, Args&&... args) {
     co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
 }
 
