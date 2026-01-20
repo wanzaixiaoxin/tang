@@ -204,10 +204,10 @@ public:
         return buffer_.size();
     }
     
-private:
-    // 实现细节
     void push_sender(std::coroutine_handle<> handle, const T& value, bool is_rvalue);
     void push_receiver(std::coroutine_handle<> handle, T* value_ptr, std::optional<T>* result_ptr);
+    
+private:
     
     // 唤醒等待的发送者或接收者
     void notify_waiters();

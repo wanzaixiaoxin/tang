@@ -70,7 +70,7 @@ public:
     
     bool try_execute() override {
         T temp;
-        T*& target_ptr = value_ptr_ ? value_ptr_ : &temp;
+        T* target_ptr = value_ptr_ ? value_ptr_ : &temp;
         
         if (ch_.try_recv(*target_ptr)) {
             if (result_ptr_) {
