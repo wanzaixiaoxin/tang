@@ -275,8 +275,9 @@ private:
 // Select函数
 template <typename... Cases>
 select_task<Cases...> select_impl(Cases&&... cases) {
-    auto& promise = co_await std::suspend_always{};
+    co_await std::suspend_always{};
     
+    auto& promise = this->promise();
     promise.cases_.reserve(sizeof...(Cases));
     ([&promise](auto& case_obj) {
         promise.cases_.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
@@ -290,6 +291,53 @@ template <typename... Cases>
 auto select(Cases&&... cases) {
     return select_impl(std::forward<Cases>(cases)...);
 }
+
+// select_awaiter类
+class select_awaiter {
+public:
+    select_awaiter(std::vector<std::unique_ptr<select_case>> cases) 
+        : cases_(std::move(cases)) {}
+    
+    bool await_ready() const noexcept {
+        // 检查是否有case可以立即执行
+        for (auto& case_ptr : cases_) {
+            if (case_ptr->try_ready()) {
+                selected_case_ = case_ptr.get();
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    void await_suspend(std::coroutine_handle<> handle) {
+        // 注册所有case的等待者
+        for (auto& case_ptr : cases_) {
+            case_ptr->register_waiter(handle);
+        }
+        
+        // 再次检查是否有case可以立即执行
+        for (auto& case_ptr : cases_) {
+            if (case_ptr->try_ready()) {
+                selected_case_ = case_ptr.get();
+                handle.resume();
+                return;
+            }
+        }
+    }
+    
+    select_case* await_resume() noexcept {
+        // 取消注册所有case的等待者
+        for (auto& case_ptr : cases_) {
+            case_ptr->unregister_waiter();
+        }
+        
+        return selected_case_;
+    }
+    
+private:
+    std::vector<std::unique_ptr<select_case>> cases_;
+    select_case* selected_case_ = nullptr;
+};
 
 // 协程等待select
 template <typename... Cases>
