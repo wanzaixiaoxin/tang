@@ -423,6 +423,7 @@ bool channel<T>::try_send(const T& value)
     return false;
 }
 
+template <typename T>
 bool channel<T>::try_send(T&& value)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -517,36 +518,7 @@ bool channel<T>::try_send(T&& value)
     return false;
 }
 
-template <typename T>
-void channel<T>::add_select_waiter(std::coroutine_handle<> handle) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    select_waiters_.push_back(handle);
-}
 
-template <typename T>
-void channel<T>::remove_select_waiter(std::coroutine_handle<> handle) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
-        if (it->address() == handle.address() || it->done()) {
-            it = select_waiters_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-template <typename T>
-void channel<T>::notify_select_waiters() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
-        if (!it->done()) {
-            it->resume();
-            it = select_waiters_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
 
 template <typename T>
 void channel<T>::add_select_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::optional<T>* result_ptr) {
