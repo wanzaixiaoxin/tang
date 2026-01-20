@@ -221,24 +221,31 @@ private:
     handle_type handle;
 };
 
-template <typename F, typename... Args>
-auto go(F&& f, Args&&... args) {
-    if constexpr (std::is_void_v<std::invoke_result_t<F, Args...>>) {
-        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-        co_return;
-    } else {
+template <typename R>
+struct go_helper {
+    template <typename F, typename... Args>
+    static task<R> create(F&& f, Args&&... args) {
         co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
     }
+};
+
+template <>
+struct go_helper<void> {
+    template <typename F, typename... Args>
+    static task<void> create(F&& f, Args&&... args) {
+        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+        co_return;
+    }
+};
+
+template <typename F, typename... Args>
+auto go(F&& f, Args&&... args) {
+    return go_helper<std::invoke_result_t<F, Args...>>::create(std::forward<F>(f), std::forward<Args>(args)...);
 }
 
 template <typename F, typename... Args>
 auto spawn(F&& f, Args&&... args) {
-    if constexpr (std::is_void_v<std::invoke_result_t<F, Args...>>) {
-        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-        co_return;
-    } else {
-        co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
-    }
+    return go_helper<std::invoke_result_t<F, Args...>>::create(std::forward<F>(f), std::forward<Args>(args)...);
 }
 
 } // namespace tang
