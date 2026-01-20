@@ -37,16 +37,13 @@ void receiver(tang::channel<int>& ch, int id, int count) {
 void buffered_channel_example() {
     std::cout << "\n=== Buffered Channel Example ===" << std::endl;
     
-    // 创建一个容量为5的缓冲通道
     tang::channel<int> ch(5);
     
-    // 启动2个发送者协程，每个发送10个数据
-    tang::go(sender, &ch, 1, 10);
-    tang::go(sender, &ch, 2, 10);
+    tang::go(sender, ch, 1, 10);
+    tang::go(sender, ch, 2, 10);
     
-    // 启动2个接收者协程，每个接收10个数据
-    tang::go(receiver, &ch, 1, 10);
-    tang::go(receiver, &ch, 2, 10);
+    tang::go(receiver, ch, 1, 10);
+    tang::go(receiver, ch, 2, 10);
 }
 
 // 无缓冲区的channel示例
