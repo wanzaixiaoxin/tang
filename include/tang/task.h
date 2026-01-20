@@ -221,15 +221,24 @@ private:
     handle_type handle;
 };
 
-// 辅助函数
 template <typename F, typename... Args>
-task<std::invoke_result_t<F, Args...>> go(F&& f, Args&&... args) {
-    co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+auto go(F&& f, Args&&... args) {
+    if constexpr (std::is_void_v<std::invoke_result_t<F, Args...>>) {
+        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+        co_return;
+    } else {
+        co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+    }
 }
 
 template <typename F, typename... Args>
-task<std::invoke_result_t<F, Args...>> spawn(F&& f, Args&&... args) {
-    co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+auto spawn(F&& f, Args&&... args) {
+    if constexpr (std::is_void_v<std::invoke_result_t<F, Args...>>) {
+        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+        co_return;
+    } else {
+        co_return std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+    }
 }
 
 } // namespace tang

@@ -79,6 +79,13 @@ public:
             return !ch_.is_closed() || !ch_.is_empty();
         }
         
+        explicit operator bool() {
+            if (result_ptr_) {
+                return result_ptr_->has_value();
+            }
+            return !ch_.is_closed() && !ch_.is_empty();
+        }
+        
         // 获取结果（仅适用于无参数构造的等待器）
         T value() {
             if (!result_ptr_ || !result_ptr_->has_value()) {
@@ -161,8 +168,8 @@ public:
     }
     
     // 接收操作符
-    auto operator>>(T& value) {
-        return await_recv(value);
+    bool operator>>(T& value) {
+        return try_recv(value);
     }
     
     // 关闭通道
