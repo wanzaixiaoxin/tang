@@ -83,11 +83,11 @@ public:
     
     void register_waiter(std::coroutine_handle<> handle) override {
         waiter_ = handle;
-        ch_.push_receiver(handle, value_ptr_, result_ptr_.get());
+        ch_.add_select_recv_waiter(handle, value_ptr_, result_ptr_.get());
     }
     
     void unregister_waiter() override {
-        // 简化实现：实际需要更复杂的机制来取消注册
+        ch_.remove_select_recv_waiter(waiter_);
         waiter_ = nullptr;
     }
     
@@ -134,11 +134,15 @@ public:
     
     void register_waiter(std::coroutine_handle<> handle) override {
         waiter_ = handle;
-        ch_.push_sender(handle, value_, is_rvalue_);
+        if (is_rvalue_) {
+            ch_.add_select_send_waiter(handle, std::move(value_));
+        } else {
+            ch_.add_select_send_waiter(handle, value_, false);
+        }
     }
     
     void unregister_waiter() override {
-        // 简化实现：实际需要更复杂的机制来取消注册
+        ch_.remove_select_send_waiter(waiter_);
         waiter_ = nullptr;
     }
     
@@ -172,76 +176,119 @@ public:
     }
 };
 
-// Select等待器
-class select_awaiter {
-public:
-    select_awaiter(std::vector<std::unique_ptr<select_case>>&& cases)
-        : cases_(std::move(cases)), selected_case_(nullptr) {}
+// Select协程任务
+template <typename... Cases>
+struct select_task {
+    struct promise_type {
+        std::vector<std::unique_ptr<select_case>> cases_;
+        std::coroutine_handle<> continuation_;
         
-    bool await_ready() noexcept {
-        // 尝试执行所有case
-        for (auto& case_ptr : cases_) {
+        select_task get_return_object() {
+            return select_task(std::coroutine_handle<promise_type>::from_promise(*this));
+        }
+        
+        std::suspend_always initial_suspend() noexcept { return {}; }
+        
+        struct final_awaiter {
+            bool await_ready() noexcept { return false; }
+            template <typename PromiseType>
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> handle) noexcept {
+                auto& promise = handle.promise();
+                if (promise.continuation_) {
+                    return promise.continuation_;
+                }
+                return std::noop_coroutine();
+            }
+            void await_resume() noexcept {}
+        };
+        
+        final_awaiter final_suspend() noexcept { return {}; }
+        
+        void return_void() {}
+        void unhandled_exception() {}
+    };
+    
+    using handle_type = std::coroutine_handle<promise_type>;
+    
+    explicit select_task(handle_type h) noexcept : handle_(h) {}
+    
+    select_task(select_task&& other) noexcept : handle_(other.handle_) {
+        other.handle_ = nullptr;
+    }
+    
+    select_task& operator=(select_task&& other) noexcept {
+        if (this != &other) {
+            if (handle_) handle_.destroy();
+            handle_ = other.handle_;
+            other.handle_ = nullptr;
+        }
+        return *this;
+    }
+    
+    select_task(const select_task&) = delete;
+    select_task& operator=(const select_task&) = delete;
+    
+    ~select_task() {
+        if (handle_) handle_.destroy();
+    }
+    
+    bool await_ready() {
+        for (auto& case_ptr : handle_->promise().cases_) {
             if (case_ptr->try_execute()) {
-                selected_case_ = case_ptr.get();
+                case_ptr->execute_callback();
                 return true;
             }
         }
         return false;
     }
     
-    void await_suspend(std::coroutine_handle<> handle) {
-        // 注册等待器到所有case
-        for (auto& case_ptr : cases_) {
-            case_ptr->register_waiter(handle);
+    void await_suspend(std::coroutine_handle<> cont) {
+        handle_->promise().continuation_ = cont;
+        for (auto& case_ptr : handle_->promise().cases_) {
+            case_ptr->register_waiter(handle_);
         }
     }
     
-    select_case* await_resume() {
-        // 取消注册所有等待器
-        for (auto& case_ptr : cases_) {
+    void await_resume() {
+        for (auto& case_ptr : handle_->promise().cases_) {
             case_ptr->unregister_waiter();
         }
         
-        // 查找已就绪的case
-        for (auto& case_ptr : cases_) {
+        for (auto& case_ptr : handle_->promise().cases_) {
             if (case_ptr->try_execute()) {
-                selected_case_ = case_ptr.get();
+                case_ptr->execute_callback();
                 break;
             }
         }
-        
-        return selected_case_;
+    }
+    
+    void run() {
+        if (handle_ && !handle_.done()) {
+            runtime::schedule(handle_);
+        }
     }
     
 private:
-    std::vector<std::unique_ptr<select_case>> cases_;
-    select_case* selected_case_;
+    handle_type handle_;
 };
 
 // Select函数
 template <typename... Cases>
-void select(Cases&&... cases) {
-    std::random_device rd;
-    std::mt19937 rng(rd());
+select_task<Cases...> select_impl(Cases&&... cases) {
+    auto& promise = co_await std::suspend_always{};
     
-    auto try_execute = [&]() -> bool {
-        bool executed = false;
-        ([&]() {
-            if (!executed && cases.try_execute()) {
-                cases.execute_callback();
-                executed = true;
-            }
-        }(), ...);
-        return executed;
-    };
+    promise.cases_.reserve(sizeof...(Cases));
+    ([&promise](auto& case_obj) {
+        promise.cases_.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
+            std::forward<decltype(case_obj)>(case_obj)));
+    }(cases), ...);
     
-    if (try_execute()) {
-        return;
-    }
-    
-    while (!try_execute()) {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
-    }
+    co_return;
+}
+
+template <typename... Cases>
+auto select(Cases&&... cases) {
+    return select_impl(std::forward<Cases>(cases)...);
 }
 
 // 协程等待select

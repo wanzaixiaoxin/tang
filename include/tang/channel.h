@@ -114,6 +114,20 @@ public:
         std::optional<T>* result_ptr;
     };
     
+    // Select接收者信息
+    struct select_receiver_info {
+        std::coroutine_handle<> handle;
+        T* value_ptr;
+        std::optional<T>* result_ptr;
+    };
+    
+    // Select发送者信息
+    struct select_sender_info {
+        std::coroutine_handle<> handle;
+        T value;
+        bool is_rvalue;
+    };
+    
     // 构造函数
     explicit channel(size_t capacity = 0);
     
@@ -207,6 +221,15 @@ public:
     void push_sender(std::coroutine_handle<> handle, const T& value, bool is_rvalue);
     void push_receiver(std::coroutine_handle<> handle, T* value_ptr, std::optional<T>* result_ptr);
     
+    // Select相关方法
+    void add_select_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::optional<T>* result_ptr);
+    void add_select_send_waiter(std::coroutine_handle<> handle, const T& value, bool is_rvalue);
+    void add_select_send_waiter(std::coroutine_handle<> handle, T&& value);
+    void remove_select_recv_waiter(std::coroutine_handle<> handle);
+    void remove_select_send_waiter(std::coroutine_handle<> handle);
+    void notify_select_waiters();
+    void process_select_waiters();
+    
 private:
     
     void notify_waiters();
@@ -218,6 +241,9 @@ private:
     std::atomic_bool closed_;
     std::queue<sender_info> send_queue_;
     std::queue<receiver_info> recv_queue_;
+    std::deque<select_receiver_info> select_recv_queue_;
+    std::deque<select_sender_info> select_send_queue_;
+    std::vector<std::coroutine_handle<>> select_waiters_;
     mutable std::mutex mutex_;
     std::condition_variable cv_;
 };
@@ -311,7 +337,6 @@ bool channel<T>::try_send(const T& value)
         return false;
     }
     
-    // 如果有等待的接收者，直接发送
     if (!recv_queue_.empty()) {
         auto receiver = recv_queue_.front();
         recv_queue_.pop();
@@ -324,24 +349,80 @@ bool channel<T>::try_send(const T& value)
         }
         
         receiver.handle.resume();
+        
+        if (!select_recv_queue_.empty()) {
+            auto receiver = select_recv_queue_.front();
+            select_recv_queue_.pop_front();
+            
+            if (receiver.value_ptr) {
+                *receiver.value_ptr = value;
+            }
+            if (receiver.result_ptr) {
+                *receiver.result_ptr = value;
+            }
+            
+            receiver.handle.resume();
+        }
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
-    // 如果缓冲区未满，放入缓冲区
+    if (!select_recv_queue_.empty()) {
+        auto receiver = select_recv_queue_.front();
+        select_recv_queue_.pop_front();
+        
+        if (receiver.value_ptr) {
+            *receiver.value_ptr = value;
+        }
+        if (receiver.result_ptr) {
+            *receiver.result_ptr = value;
+        }
+        
+        receiver.handle.resume();
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
+        return true;
+    }
+    
     if (capacity_ == 0) {
-        // 无缓冲通道，需要等待接收者
         return false;
     }
     
     if (buffer_.size() < capacity_) {
         buffer_.push_back(value);
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
     return false;
 }
 
-template <typename T>
 bool channel<T>::try_send(T&& value)
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -350,7 +431,6 @@ bool channel<T>::try_send(T&& value)
         return false;
     }
     
-    // 如果有等待的接收者，直接发送
     if (!recv_queue_.empty()) {
         auto receiver = recv_queue_.front();
         recv_queue_.pop();
@@ -363,21 +443,192 @@ bool channel<T>::try_send(T&& value)
         }
         
         receiver.handle.resume();
+        
+        if (!select_recv_queue_.empty()) {
+            auto receiver = select_recv_queue_.front();
+            select_recv_queue_.pop_front();
+            
+            if (receiver.value_ptr) {
+                *receiver.value_ptr = std::move(value);
+            }
+            if (receiver.result_ptr) {
+                *receiver.result_ptr = std::move(value);
+            }
+            
+            receiver.handle.resume();
+        }
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
-    // 如果缓冲区未满，放入缓冲区
+    if (!select_recv_queue_.empty()) {
+        auto receiver = select_recv_queue_.front();
+        select_recv_queue_.pop_front();
+        
+        if (receiver.value_ptr) {
+            *receiver.value_ptr = std::move(value);
+        }
+        if (receiver.result_ptr) {
+            *receiver.result_ptr = std::move(value);
+        }
+        
+        receiver.handle.resume();
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
+        return true;
+    }
+    
     if (capacity_ == 0) {
-        // 无缓冲通道，需要等待接收者
         return false;
     }
     
     if (buffer_.size() < capacity_) {
         buffer_.push_back(std::move(value));
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
     return false;
+}
+
+template <typename T>
+void channel<T>::add_select_waiter(std::coroutine_handle<> handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    select_waiters_.push_back(handle);
+}
+
+template <typename T>
+void channel<T>::remove_select_waiter(std::coroutine_handle<> handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+        if (it->address() == handle.address() || it->done()) {
+            it = select_waiters_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template <typename T>
+void channel<T>::notify_select_waiters() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+        if (!it->done()) {
+            it->resume();
+            it = select_waiters_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template <typename T>
+void channel<T>::add_select_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::optional<T>* result_ptr) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    select_recv_queue_.push_back({handle, value_ptr, result_ptr});
+}
+
+template <typename T>
+void channel<T>::add_select_send_waiter(std::coroutine_handle<> handle, const T& value, bool is_rvalue) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    select_send_queue_.push_back({handle, value, is_rvalue});
+}
+
+template <typename T>
+void channel<T>::add_select_send_waiter(std::coroutine_handle<> handle, T&& value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    select_send_queue_.push_back({handle, std::move(value), true});
+}
+
+template <typename T>
+void channel<T>::remove_select_recv_waiter(std::coroutine_handle<> handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = select_recv_queue_.begin(); it != select_recv_queue_.end(); ) {
+        if (it->handle.address() == handle.address() || it->handle.done()) {
+            it = select_recv_queue_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template <typename T>
+void channel<T>::remove_select_send_waiter(std::coroutine_handle<> handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto it = select_send_queue_.begin(); it != select_send_queue_.end(); ) {
+        if (it->handle.address() == handle.address() || it->handle.done()) {
+            it = select_send_queue_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+template <typename T>
+void channel<T>::process_select_waiters() {
+    // 尝试匹配发送者和接收者
+    while (!select_send_queue_.empty() && !select_recv_queue_.empty()) {
+        auto sender = select_send_queue_.front();
+        select_send_queue_.pop_front();
+        
+        auto receiver = select_recv_queue_.front();
+        select_recv_queue_.pop_front();
+        
+        if (sender.is_rvalue) {
+            if (receiver.value_ptr) {
+                *receiver.value_ptr = std::move(sender.value);
+            }
+            if (receiver.result_ptr) {
+                *receiver.result_ptr = std::move(sender.value);
+            }
+        } else {
+            if (receiver.value_ptr) {
+                *receiver.value_ptr = sender.value;
+            }
+            if (receiver.result_ptr) {
+                *receiver.result_ptr = sender.value;
+            }
+        }
+        
+        receiver.handle.resume();
+        sender.handle.resume();
+    }
+    
+    // 唤醒其他select等待者
+    for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+        if (!it->done()) {
+            it->resume();
+            it = select_waiters_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 template <typename T>
@@ -425,13 +676,11 @@ bool channel<T>::try_recv(T& value)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    // 如果缓冲区有数据，直接接收
     if (!buffer_.empty()) {
         value = std::move(buffer_[head_]);
         head_ = (head_ + 1) % capacity_;
         buffer_.erase(buffer_.begin());
         
-        // 唤醒等待的发送者
         if (!send_queue_.empty()) {
             auto sender = send_queue_.front();
             send_queue_.pop();
@@ -445,10 +694,31 @@ bool channel<T>::try_recv(T& value)
             sender.handle.resume();
         }
         
+        if (!select_send_queue_.empty()) {
+            auto sender = select_send_queue_.front();
+            select_send_queue_.pop_front();
+            
+            if (sender.is_rvalue) {
+                buffer_.push_back(std::move(sender.value));
+            } else {
+                buffer_.push_back(sender.value);
+            }
+            
+            sender.handle.resume();
+        }
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
-    // 如果有等待的发送者，直接接收
     if (!send_queue_.empty()) {
         auto sender = send_queue_.front();
         send_queue_.pop();
@@ -460,10 +730,57 @@ bool channel<T>::try_recv(T& value)
         }
         
         sender.handle.resume();
+        
+        if (!select_send_queue_.empty()) {
+            auto sender = select_send_queue_.front();
+            select_send_queue_.pop_front();
+            
+            if (sender.is_rvalue) {
+                value = std::move(sender.value);
+            } else {
+                value = sender.value;
+            }
+            
+            sender.handle.resume();
+        }
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
         return true;
     }
     
-    return closed_;
+    if (!select_send_queue_.empty()) {
+        auto sender = select_send_queue_.front();
+        select_send_queue_.pop_front();
+        
+        if (sender.is_rvalue) {
+            value = std::move(sender.value);
+        } else {
+            value = sender.value;
+        }
+        
+        sender.handle.resume();
+        
+        for (auto it = select_waiters_.begin(); it != select_waiters_.end(); ) {
+            if (!it->done()) {
+                it->resume();
+                it = select_waiters_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
+        return true;
+    }
+    
+    return false;
 }
 
 template <typename T>
@@ -533,6 +850,9 @@ void channel<T>::push_sender(std::coroutine_handle<> handle, const T& value, boo
     } else {
         cv_.notify_all();
     }
+    
+    // 处理select等待者
+    process_select_waiters();
 }
 
 template <typename T>
@@ -586,6 +906,9 @@ void channel<T>::push_receiver(std::coroutine_handle<> handle, T* value_ptr, std
     } else {
         cv_.notify_all();
     }
+    
+    // 处理select等待者
+    process_select_waiters();
 }
 
 template <typename T>
