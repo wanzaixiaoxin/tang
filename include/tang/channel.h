@@ -209,27 +209,15 @@ public:
     
 private:
     
-    // 唤醒等待的发送者或接收者
     void notify_waiters();
     
-    // 容量（0表示无缓冲）
     size_t capacity_;
-    
-    // 缓冲区
     std::vector<T> buffer_;
-    size_t head_ = 0;  // 缓冲区头部索引
-    size_t tail_ = 0;  // 缓冲区尾部索引
-    
-    // 关闭状态
+    size_t head_ = 0;
+    size_t tail_ = 0;
     std::atomic_bool closed_;
-    
-    // 发送等待队列
     std::queue<sender_info> send_queue_;
-    
-    // 接收等待队列
     std::queue<receiver_info> recv_queue_;
-    
-    // 互斥锁和条件变量
     mutable std::mutex mutex_;
     std::condition_variable cv_;
 };
@@ -237,11 +225,8 @@ private:
 // Channel类实现
 template <typename T>
 channel<T>::channel(size_t capacity)
-    : capacity_(capacity), closed_(false), head_(0), tail_(0)
+    : capacity_(capacity), buffer_(capacity), head_(0), tail_(0), closed_(false)
 {
-    if (capacity_ > 0) {
-        buffer_.resize(capacity_);
-    }
 }
 
 template <typename T>
