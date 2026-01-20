@@ -31,6 +31,9 @@ public:
     // 尝试执行case
     virtual bool try_execute() = 0;
     
+    // 尝试检查是否可执行
+    virtual bool try_ready() = 0;
+    
     // 注册等待器
     virtual void register_waiter(std::coroutine_handle<> handle) = 0;
     
@@ -57,214 +60,122 @@ protected:
 template <typename T>
 class recv_case : public select_case {
 public:
-    recv_case(channel<T>& ch, T& value)
-        : ch_(ch), value_ptr_(&value), result_ptr_(nullptr), waiter_(nullptr) {}
-        
-    recv_case(channel<T>& ch)
-        : ch_(ch), value_ptr_(nullptr), 
-          result_ptr_(std::make_unique<std::optional<T>>()), waiter_(nullptr) {}
-        
+    recv_case(channel<T>& ch, T& value) : ch_(ch), value_ptr_(&value) {}
+    recv_case(channel<T>& ch) : ch_(ch), value_ptr_(nullptr) {}
+    
     select_case_type type() const override {
         return select_case_type::recv;
     }
     
     bool try_execute() override {
-        T temp;
-        T* target_ptr = value_ptr_ ? value_ptr_ : &temp;
-        
-        if (ch_.try_recv(*target_ptr)) {
-            if (result_ptr_) {
-                *result_ptr_ = std::move(*target_ptr);
-            }
-            return true;
+        if (value_ptr_) {
+            return ch_.try_recv(*value_ptr_);
+        } else {
+            T temp;
+            return ch_.try_recv(temp);
         }
-        return false;
+    }
+    
+    bool try_ready() override {
+        return try_execute();
     }
     
     void register_waiter(std::coroutine_handle<> handle) override {
-        waiter_ = handle;
-        ch_.add_select_recv_waiter(handle, value_ptr_, result_ptr_.get());
+        // 实现等待器注册逻辑
+        (void)handle; // 暂未实现
     }
     
     void unregister_waiter() override {
-        ch_.remove_select_recv_waiter(waiter_);
-        waiter_ = nullptr;
-    }
-    
-    // 获取结果（仅适用于无参数构造的case）
-    bool has_value() const {
-        return result_ptr_ && result_ptr_->has_value();
-    }
-    
-    T value() {
-        if (!result_ptr_ || !result_ptr_->has_value()) {
-            throw std::runtime_error("no value available");
-        }
-        return std::move(result_ptr_->value());
+        // 实现等待器取消注册逻辑
     }
     
 private:
     channel<T>& ch_;
     T* value_ptr_;
-    std::unique_ptr<std::optional<T>> result_ptr_;
-    std::coroutine_handle<> waiter_;
 };
 
 // 发送case
 template <typename T>
 class send_case : public select_case {
 public:
-    send_case(channel<T>& ch, const T& value)
-        : ch_(ch), value_(value), is_rvalue_(false), waiter_(nullptr) {}
-        
-    send_case(channel<T>& ch, T&& value)
-        : ch_(ch), value_(std::move(value)), is_rvalue_(true), waiter_(nullptr) {}
-        
+    send_case(channel<T>& ch, const T& value) : ch_(ch), value_(value) {}
+    send_case(channel<T>& ch, T&& value) : ch_(ch), value_(std::move(value)) {}
+    
     select_case_type type() const override {
         return select_case_type::send;
     }
     
     bool try_execute() override {
-        if (is_rvalue_) {
-            return ch_.try_send(std::move(value_));
-        } else {
-            return ch_.try_send(value_);
-        }
+        return ch_.try_send(value_);
+    }
+    
+    bool try_ready() override {
+        return try_execute();
     }
     
     void register_waiter(std::coroutine_handle<> handle) override {
-        waiter_ = handle;
-        if (is_rvalue_) {
-            ch_.add_select_send_waiter(handle, std::move(value_));
-        } else {
-            ch_.add_select_send_waiter(handle, value_, false);
-        }
+        // 实现等待器注册逻辑
+        (void)handle; // 暂未实现
     }
     
     void unregister_waiter() override {
-        ch_.remove_select_send_waiter(waiter_);
-        waiter_ = nullptr;
+        // 实现等待器取消注册逻辑
     }
     
 private:
     channel<T>& ch_;
     T value_;
-    bool is_rvalue_;
-    std::coroutine_handle<> waiter_;
 };
 
-// 默认case
-class default_select_case : public select_case {
-public:
-    default_select_case() = default;
-    
-    select_case_type type() const override {
-        return select_case_type::default_case;
-    }
-    
-    bool try_execute() override {
-        // 默认case总是可执行的
-        return true;
-    }
-    
-    void register_waiter(std::coroutine_handle<>) override {
-        // 默认case不需要等待
-    }
-    
-    void unregister_waiter() override {
-        // 默认case不需要等待
-    }
-};
-
-// Select协程任务
+// Select任务类
 template <typename... Cases>
-struct select_task {
+class select_task {
+public:
     struct promise_type {
         std::vector<std::unique_ptr<select_case>> cases_;
-        std::coroutine_handle<> continuation_;
         
         select_task get_return_object() {
-            return select_task(std::coroutine_handle<promise_type>::from_promise(*this));
+            return select_task{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
         
-        std::suspend_always initial_suspend() noexcept { return {}; }
-        
-        struct final_awaiter {
-            bool await_ready() noexcept { return false; }
-            template <typename PromiseType>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> handle) noexcept {
-                auto& promise = handle.promise();
-                if (promise.continuation_) {
-                    return promise.continuation_;
-                }
-                return std::noop_coroutine();
-            }
-            void await_resume() noexcept {}
-        };
-        
-        final_awaiter final_suspend() noexcept { return {}; }
-        
-        void return_void() {}
+        std::suspend_always initial_suspend() { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
         void unhandled_exception() {}
+        void return_void() {}
     };
     
     using handle_type = std::coroutine_handle<promise_type>;
     
-    explicit select_task(handle_type h) noexcept : handle_(h) {}
+    select_task(handle_type handle) : handle_(handle) {}
+    ~select_task() {
+        if (handle_) {
+            handle_.destroy();
+        }
+    }
     
+    // 禁止拷贝
+    select_task(const select_task&) = delete;
+    select_task& operator=(const select_task&) = delete;
+    
+    // 允许移动
     select_task(select_task&& other) noexcept : handle_(other.handle_) {
-        other.handle_ = nullptr;
+        other.handle_ = {};
     }
     
     select_task& operator=(select_task&& other) noexcept {
         if (this != &other) {
-            if (handle_) handle_.destroy();
+            if (handle_) {
+                handle_.destroy();
+            }
             handle_ = other.handle_;
-            other.handle_ = nullptr;
+            other.handle_ = {};
         }
         return *this;
     }
     
-    select_task(const select_task&) = delete;
-    select_task& operator=(const select_task&) = delete;
-    
-    ~select_task() {
-        if (handle_) handle_.destroy();
-    }
-    
-    bool await_ready() {
-        for (auto& case_ptr : handle_->promise().cases_) {
-            if (case_ptr->try_execute()) {
-                case_ptr->execute_callback();
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    void await_suspend(std::coroutine_handle<> cont) {
-        handle_->promise().continuation_ = cont;
-        for (auto& case_ptr : handle_->promise().cases_) {
-            case_ptr->register_waiter(handle_);
-        }
-    }
-    
-    void await_resume() {
-        for (auto& case_ptr : handle_->promise().cases_) {
-            case_ptr->unregister_waiter();
-        }
-        
-        for (auto& case_ptr : handle_->promise().cases_) {
-            if (case_ptr->try_execute()) {
-                case_ptr->execute_callback();
-                break;
-            }
-        }
-    }
-    
     void run() {
         if (handle_ && !handle_.done()) {
-            runtime::schedule(handle_);
+            handle_.resume();
         }
     }
     
@@ -272,33 +183,13 @@ private:
     handle_type handle_;
 };
 
-// Select函数
-template <typename... Cases>
-select_task<Cases...> select_impl(Cases&&... cases) {
-    co_await std::suspend_always{};
-    
-    auto& promise = this->promise();
-    promise.cases_.reserve(sizeof...(Cases));
-    ([&promise](auto& case_obj) {
-        promise.cases_.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
-            std::forward<decltype(case_obj)>(case_obj)));
-    }(cases), ...);
-    
-    co_return;
-}
-
-template <typename... Cases>
-auto select(Cases&&... cases) {
-    return select_impl(std::forward<Cases>(cases)...);
-}
-
 // select_awaiter类
 class select_awaiter {
 public:
     select_awaiter(std::vector<std::unique_ptr<select_case>> cases) 
         : cases_(std::move(cases)) {}
     
-    bool await_ready() const noexcept {
+    bool await_ready() {
         // 检查是否有case可以立即执行
         for (auto& case_ptr : cases_) {
             if (case_ptr->try_ready()) {
@@ -339,6 +230,29 @@ private:
     select_case* selected_case_ = nullptr;
 };
 
+// Select函数
+template <typename... Cases>
+select_task<Cases...> select_impl(Cases&&... cases) {
+    co_await std::suspend_always{};
+    
+    // 创建promise对象
+    typename select_task<Cases...>::promise_type promise;
+    promise.cases_.reserve(sizeof...(Cases));
+    
+    // 收集所有case
+    ([&promise](auto& case_obj) {
+        promise.cases_.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
+            std::forward<decltype(case_obj)>(case_obj)));
+    }(cases), ...);
+    
+    co_return;
+}
+
+template <typename... Cases>
+auto select(Cases&&... cases) {
+    return select_impl(std::forward<Cases>(cases)...);
+}
+
 // 协程等待select
 template <typename... Cases>
 auto co_select(Cases&&... cases) {
@@ -359,7 +273,13 @@ auto co_select(Cases&&... cases) {
 template <typename T>
 auto case_recv(channel<T>& ch, T& value) {
     auto c = recv_case<T>(ch, value);
-    c.set_callback([]() {});
+    return c;
+}
+
+template <typename T>
+auto case_recv(channel<T>& ch, T& value, std::function<void()> callback) {
+    auto c = recv_case<T>(ch, value);
+    c.set_callback(callback);
     return c;
 }
 
@@ -368,17 +288,10 @@ auto case_recv(channel<T>& ch) {
     return recv_case<T>(ch);
 }
 
-template <typename T, typename F>
-auto case_recv(channel<T>& ch, T& value, F&& callback) {
-    auto c = recv_case<T>(ch, value);
-    c.set_callback(std::forward<F>(callback));
-    return c;
-}
-
-template <typename T, typename F>
-auto case_recv(channel<T>& ch, F&& callback) {
+template <typename T>
+auto case_recv(channel<T>& ch, std::function<void()> callback) {
     auto c = recv_case<T>(ch);
-    c.set_callback(std::forward<F>(callback));
+    c.set_callback(callback);
     return c;
 }
 
@@ -389,34 +302,60 @@ auto case_send(channel<T>& ch, const T& value) {
 }
 
 template <typename T>
+auto case_send(channel<T>& ch, const T& value, std::function<void()> callback) {
+    auto c = send_case<T>(ch, value);
+    c.set_callback(callback);
+    return c;
+}
+
+template <typename T>
 auto case_send(channel<T>& ch, T&& value) {
     return send_case<T>(ch, std::move(value));
 }
 
-template <typename T, typename F>
-auto case_send(channel<T>& ch, const T& value, F&& callback) {
-    auto c = send_case<T>(ch, value);
-    c.set_callback(std::forward<F>(callback));
-    return c;
-}
-
-template <typename T, typename F>
-auto case_send(channel<T>& ch, T&& value, F&& callback) {
+template <typename T>
+auto case_send(channel<T>& ch, T&& value, std::function<void()> callback) {
     auto c = send_case<T>(ch, std::move(value));
-    c.set_callback(std::forward<F>(callback));
+    c.set_callback(callback);
     return c;
 }
 
-// 辅助函数：创建默认case
-inline auto default_case() {
-    return default_select_case();
-}
+// 默认case类
+class default_case_class : public select_case {
+public:
+    default_case_class(std::function<void()> callback) : callback_(std::move(callback)) {}
+    
+    select_case_type type() const override {
+        return select_case_type::default_case;
+    }
+    
+    bool try_execute() override {
+        if (callback_) {
+            callback_();
+            return true;
+        }
+        return false;
+    }
+    
+    bool try_ready() override {
+        return true; // 默认case总是可执行
+    }
+    
+    void register_waiter(std::coroutine_handle<> handle) override {
+        (void)handle; // 默认case不需要等待
+    }
+    
+    void unregister_waiter() override {
+        // 默认case不需要取消注册
+    }
+    
+private:
+    std::function<void()> callback_;
+};
 
-template <typename F>
-auto default_case(F&& callback) {
-    auto c = default_select_case();
-    c.set_callback(std::forward<F>(callback));
-    return c;
+// 默认case辅助函数
+auto default_case(std::function<void()> callback) {
+    return default_case_class(std::move(callback));
 }
 
 } // namespace tang
