@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <memory>
+#include <chrono>
 
 namespace tang {
 namespace runtime {
@@ -19,6 +20,8 @@ void init(size_t num_threads = 0);
 void run();
 void stop();
 void schedule(std::coroutine_handle<> handle);
+void yield();
+void sleep_ms(size_t ms);
 
 class scheduler {
 public:

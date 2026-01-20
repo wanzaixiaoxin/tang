@@ -259,15 +259,12 @@ TEST(SelectTest, MixedSendRecvSelect) {
     
     std::atomic_int received = 0;
     std::atomic_int sent = 0;
-    std::atomic_int operation_type = 0;  // 1: recv from ch1, 2: send to ch2
+    std::atomic_int operation_type = 0;
     
-    // 初始化运行时
-    tang::init(2);
+    tang::runtime::init(2);
     
-    // 先向ch1发送一个数据
     ch1 << 100;
     
-    // 创建协程，使用select同时等待接收和发送
     tang::go([&ch1, &ch2, &received, &sent, &operation_type]() {
         int value;
         
@@ -283,16 +280,13 @@ TEST(SelectTest, MixedSendRecvSelect) {
         );
     });
     
-    // 创建接收协程，从ch2接收数据
     tang::go([&ch2]() {
         int value;
         ch2 >> value;
     });
     
-    // 运行调度器
-    tang::run();
+    tang::runtime::run();
     
-    // 验证结果：应该执行其中一个操作
     if (operation_type.load() == 1) {
         EXPECT_EQ(received.load(), 100);
     } else if (operation_type.load() == 2) {
@@ -301,8 +295,7 @@ TEST(SelectTest, MixedSendRecvSelect) {
         FAIL() << "No operation was selected";
     }
     
-    // 停止运行时
-    tang::stop();
+    tang::runtime::stop();
 }
 
 // 测试关闭channel后select的行为

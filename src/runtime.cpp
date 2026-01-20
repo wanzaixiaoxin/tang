@@ -110,5 +110,13 @@ void schedule(std::coroutine_handle<> handle) {
     g_scheduler->schedule(handle);
 }
 
+void yield() {
+    std::this_thread::yield();
+}
+
+void sleep_ms(size_t ms) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
 } // namespace runtime
 } // namespace tang
