@@ -263,12 +263,28 @@ auto co_select(Cases&&... cases) {
 // 辅助函数：创建接收case
 template <typename T>
 auto case_recv(channel<T>& ch, T& value) {
-    return recv_case<T>(ch, value);
+    auto c = recv_case<T>(ch, value);
+    c.set_callback([]() {});
+    return c;
 }
 
 template <typename T>
 auto case_recv(channel<T>& ch) {
     return recv_case<T>(ch);
+}
+
+template <typename T, typename F>
+auto case_recv(channel<T>& ch, T& value, F&& callback) {
+    auto c = recv_case<T>(ch, value);
+    c.set_callback(std::forward<F>(callback));
+    return c;
+}
+
+template <typename T, typename F>
+auto case_recv(channel<T>& ch, F&& callback) {
+    auto c = recv_case<T>(ch);
+    c.set_callback(std::forward<F>(callback));
+    return c;
 }
 
 // 辅助函数：创建发送case
@@ -282,9 +298,30 @@ auto case_send(channel<T>& ch, T&& value) {
     return send_case<T>(ch, std::move(value));
 }
 
+template <typename T, typename F>
+auto case_send(channel<T>& ch, const T& value, F&& callback) {
+    auto c = send_case<T>(ch, value);
+    c.set_callback(std::forward<F>(callback));
+    return c;
+}
+
+template <typename T, typename F>
+auto case_send(channel<T>& ch, T&& value, F&& callback) {
+    auto c = send_case<T>(ch, std::move(value));
+    c.set_callback(std::forward<F>(callback));
+    return c;
+}
+
 // 辅助函数：创建默认case
 inline auto default_case() {
     return default_select_case();
+}
+
+template <typename F>
+auto default_case(F&& callback) {
+    auto c = default_select_case();
+    c.set_callback(std::forward<F>(callback));
+    return c;
 }
 
 } // namespace tang

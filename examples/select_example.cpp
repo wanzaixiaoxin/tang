@@ -30,9 +30,9 @@ void select_example() {
     tang::channel<int> ch3(5);
     
     // 启动三个发送者协程，不同的发送频率
-    tang::go(send_data, &ch1, 1, 100, 5);  // 每100ms发送一次，共5次
-    tang::go(send_data, &ch2, 2, 200, 5);  // 每200ms发送一次，共5次
-    tang::go(send_data, &ch3, 3, 300, 5);  // 每300ms发送一次，共5次
+    tang::go(send_data, ch1, 1, 100, 5);  // 每100ms发送一次，共5次
+    tang::go(send_data, ch2, 2, 200, 5);  // 每200ms发送一次，共5次
+    tang::go(send_data, ch3, 3, 300, 5);  // 每300ms发送一次，共5次
     
     // 接收计数器
     int received = 0;
