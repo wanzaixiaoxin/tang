@@ -7,19 +7,21 @@ set(TESTS
     select_test
 )
 
-# 如果找到Google Test，则启用测试
-find_package(GTest QUIET)
-
-if(GTest_FOUND)
-    message(STATUS "Found Google Test: ${GTEST_VERSION}")
+# 为每个测试创建可执行文件（独立版本，不依赖Google Test）
+foreach(test ${TESTS})
+    add_executable(${test} ${test}.cpp)
+    target_link_libraries(${test} tang)
     
-    # 为每个测试创建可执行文件
-    foreach(test ${TESTS})
-        add_executable(${test} ${test}.cpp)
-        target_link_libraries(${test} tang GTest::GTest GTest::Main)
-        add_test(NAME ${test} COMMAND ${test})
-    endforeach()
-else()
-    message(STATUS "Google Test not found, tests will be skipped")
-    message(STATUS "To enable tests, install Google Test or use -DGTEST_ROOT to specify its location")
-endif()
+    # 设置输出目录
+    set_target_properties(${test} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+    )
+    
+    # 为测试目标添加G++特定选项
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${test} PRIVATE -fcoroutines)
+        target_link_options(${test} PRIVATE -fcoroutines)
+    endif()
+    
+    message(STATUS "Configured test: ${test}")
+endforeach()

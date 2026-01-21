@@ -1,14 +1,10 @@
 #ifndef TANG_CHANNEL_H
 #define TANG_CHANNEL_H
 
-#include <coroutine>
 #include <vector>
-#include <queue>
 #include <mutex>
 #include <atomic>
-#include <condition_variable>
-#include <optional>
-#include <memory>
+#include <utility>  // 添加std::move支持
 
 namespace tang {
 
@@ -49,55 +45,41 @@ public:
         close();
     }
     
-    // 发送操作
+    // 尝试发送
     bool try_send(const T& value) {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        if (closed_.load()) {
+        if (closed_ || (capacity_ > 0 && buffer_.size() >= capacity_)) {
             return false;
         }
         
-        if (capacity_ == 0) {
-            return false;
-        }
-        
-        if (buffer_.size() < capacity_) {
-            buffer_.push_back(value);
-            return true;
-        }
-        
-        return false;
+        buffer_.push_back(value);
+        return true;
     }
     
     bool try_send(T&& value) {
         std::lock_guard<std::mutex> lock(mutex_);
         
-        if (closed_.load()) {
+        if (closed_ || (capacity_ > 0 && buffer_.size() >= capacity_)) {
             return false;
         }
         
-        if (capacity_ == 0) {
-            return false;
-        }
-        
-        if (buffer_.size() < capacity_) {
-            buffer_.push_back(std::move(value));
-            return true;
-        }
-        
-        return false;
+        buffer_.push_back(std::move(value));
+        return true;
     }
     
     // 发送操作符
-    bool operator<<(const T& value) {
-        return try_send(value);
+    channel& operator<<(const T& value) {
+        try_send(value);
+        return *this;
     }
     
-    bool operator<<(T&& value) {
-        return try_send(std::move(value));
+    channel& operator<<(T&& value) {
+        try_send(std::move(value));
+        return *this;
     }
     
-    // 接收操作
+    // 尝试接收
     bool try_recv(T& value) {
         std::lock_guard<std::mutex> lock(mutex_);
         
