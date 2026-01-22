@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <chrono>
+#include <list>
 
 namespace tang {
 namespace runtime {
@@ -36,7 +37,7 @@ public:
     
 private:
     std::vector<std::thread> threads_;
-    std::vector<std::coroutine_handle<>> task_queue_;
+    std::list<std::coroutine_handle<>> task_queue_;  // 使用list实现FIFO
     std::mutex queue_mutex_;
     std::atomic_bool running_;
 };

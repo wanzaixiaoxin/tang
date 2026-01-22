@@ -1,6 +1,7 @@
 #include <tang/runtime.h>
 #include <iostream>
 #include <chrono>
+#include <condition_variable>
 
 namespace tang {
 namespace runtime {
@@ -35,15 +36,17 @@ void scheduler::init() {
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex_);
                     if (!task_queue_.empty()) {
-                        handle = task_queue_.back();
-                        task_queue_.pop_back();
+                        // 使用FIFO，从队列前端获取任务
+                        handle = task_queue_.front();
+                        task_queue_.pop_front();
                     }
                 }
                 
                 if (handle) {
                     handle.resume();
                 } else {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    // 无任务时短暂睡眠，减少CPU占用
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
                 }
             }
         });
@@ -52,7 +55,10 @@ void scheduler::init() {
 
 void scheduler::run() {
     init();
-    std::cin.get();
+    
+    // 运行一段时间，让任务有机会完成
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    
     stop();
 }
 
@@ -61,6 +67,7 @@ void scheduler::stop() {
         return;
     }
     
+    // 等待所有线程结束
     for (auto& thread : threads_) {
         if (thread.joinable()) {
             thread.join();
@@ -112,6 +119,8 @@ void schedule(std::coroutine_handle<> handle) {
 
 void yield() {
     std::this_thread::yield();
+    // 让出后重新调度
+    schedule(std::coroutine_handle<>::from_address(nullptr));
 }
 
 void sleep_ms(size_t ms) {

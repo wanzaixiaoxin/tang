@@ -33,9 +33,8 @@ private:
 #define TANG_DEFER_CONCAT(a, b) a##b
 #define TANG_DEFER_VAR_NAME(line) TANG_DEFER_CONCAT(__defer_, line)
 
+// 支持 defer { ... } 语法
 #define defer \
-    tang::defer_guard TANG_DEFER_VAR_NAME(__LINE__) = tang::defer_guard([&]() {
-
-#define end_defer });
+    tang::defer_guard TANG_DEFER_VAR_NAME(__LINE__) = tang::defer_guard([&]() 
 
 #endif // TANG_DEFER_H

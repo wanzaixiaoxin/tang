@@ -241,13 +241,17 @@ struct go_helper<void> {
 template <typename F, typename... Args>
 auto go(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
-    return go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    task.run(); // 立即调度任务
+    return task;
 }
 
 template <typename F, typename... Args>
 auto spawn(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
-    return go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    task.run(); // 立即调度任务
+    return task;
 }
 
 } // namespace tang

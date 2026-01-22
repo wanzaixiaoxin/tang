@@ -52,8 +52,20 @@ public:
         }
     }
     
+    // 设置关联的select_awaiter
+    void set_awaiter(void* awaiter) {
+        awaiter_ = awaiter;
+    }
+    
+    // 获取关联的select_awaiter
+    void* get_awaiter() const {
+        return awaiter_;
+    }
+    
 protected:
     std::function<void()> callback_;
+    void* awaiter_ = nullptr; // 关联的select_awaiter
+    std::coroutine_handle<> handle_; // 等待的协程句柄
 };
 
 // 接收case
@@ -69,24 +81,34 @@ public:
     
     bool try_execute() override {
         if (value_ptr_) {
-            return ch_.try_recv(*value_ptr_);
+            if (ch_.try_recv(*value_ptr_)) {
+                execute_callback();
+                return true;
+            }
         } else {
             T temp;
-            return ch_.try_recv(temp);
+            if (ch_.try_recv(temp)) {
+                execute_callback();
+                return true;
+            }
         }
+        return false;
     }
     
     bool try_ready() override {
-        return try_execute();
+        // 仅检查是否可执行，不执行实际操作
+        return !ch_.is_empty() || ch_.is_closed();
     }
     
     void register_waiter(std::coroutine_handle<> handle) override {
-        // 实现等待器注册逻辑
-        (void)handle; // 暂未实现
+        handle_ = handle;
+        // 注册到通道的接收等待者列表
+        // 注意：这里需要通道支持select等待者注册
     }
     
     void unregister_waiter() override {
-        // 实现等待器取消注册逻辑
+        handle_ = nullptr;
+        // 从通道的接收等待者列表中移除
     }
     
 private:
@@ -106,20 +128,27 @@ public:
     }
     
     bool try_execute() override {
-        return ch_.try_send(value_);
+        if (ch_.try_send(value_)) {
+            execute_callback();
+            return true;
+        }
+        return false;
     }
     
     bool try_ready() override {
-        return try_execute();
+        // 仅检查是否可执行，不执行实际操作
+        return !ch_.is_full() || ch_.is_closed();
     }
     
     void register_waiter(std::coroutine_handle<> handle) override {
-        // 实现等待器注册逻辑
-        (void)handle; // 暂未实现
+        handle_ = handle;
+        // 注册到通道的发送等待者列表
+        // 注意：这里需要通道支持select等待者注册
     }
     
     void unregister_waiter() override {
-        // 实现等待器取消注册逻辑
+        handle_ = nullptr;
+        // 从通道的发送等待者列表中移除
     }
     
 private:
@@ -127,73 +156,28 @@ private:
     T value_;
 };
 
-// Select任务类
-template <typename... Cases>
-class select_task {
-public:
-    struct promise_type {
-        std::vector<std::unique_ptr<select_case>> cases_;
-        
-        select_task get_return_object() {
-            return select_task{std::coroutine_handle<promise_type>::from_promise(*this)};
-        }
-        
-        std::suspend_always initial_suspend() { return {}; }
-        std::suspend_always final_suspend() noexcept { return {}; }
-        void unhandled_exception() {}
-        void return_void() {}
-    };
-    
-    using handle_type = std::coroutine_handle<promise_type>;
-    
-    select_task(handle_type handle) : handle_(handle) {}
-    ~select_task() {
-        if (handle_) {
-            handle_.destroy();
-        }
-    }
-    
-    // 禁止拷贝
-    select_task(const select_task&) = delete;
-    select_task& operator=(const select_task&) = delete;
-    
-    // 允许移动
-    select_task(select_task&& other) noexcept : handle_(other.handle_) {
-        other.handle_ = {};
-    }
-    
-    select_task& operator=(select_task&& other) noexcept {
-        if (this != &other) {
-            if (handle_) {
-                handle_.destroy();
-            }
-            handle_ = other.handle_;
-            other.handle_ = {};
-        }
-        return *this;
-    }
-    
-    void run() {
-        if (handle_ && !handle_.done()) {
-            handle_.resume();
-        }
-    }
-    
-private:
-    handle_type handle_;
-};
-
 // select_awaiter类
 class select_awaiter {
 public:
     select_awaiter(std::vector<std::unique_ptr<select_case>> cases) 
-        : cases_(std::move(cases)) {}
+        : cases_(std::move(cases)) {
+        // 为每个case设置关联的awaiter
+        for (auto& case_ptr : cases_) {
+            case_ptr->set_awaiter(this);
+        }
+    }
     
     bool await_ready() {
+        // 随机打乱顺序，实现公平性
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(cases_.begin(), cases_.end(), g);
+        
         // 检查是否有case可以立即执行
         for (auto& case_ptr : cases_) {
             if (case_ptr->try_ready()) {
                 selected_case_ = case_ptr.get();
+                selected_case_->try_execute();
                 return true;
             }
         }
@@ -201,57 +185,55 @@ public:
     }
     
     void await_suspend(std::coroutine_handle<> handle) {
+        handle_ = handle;
+        
         // 注册所有case的等待者
         for (auto& case_ptr : cases_) {
             case_ptr->register_waiter(handle);
         }
         
-        // 再次检查是否有case可以立即执行
+        // 再次检查是否有case可以立即执行（防止竞态条件）
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(cases_.begin(), cases_.end(), g);
+        
         for (auto& case_ptr : cases_) {
             if (case_ptr->try_ready()) {
                 selected_case_ = case_ptr.get();
+                selected_case_->try_execute();
+                
+                // 取消注册所有case的等待者
+                for (auto& case_ptr : cases_) {
+                    case_ptr->unregister_waiter();
+                }
+                
                 handle.resume();
                 return;
             }
         }
     }
     
-    select_case* await_resume() noexcept {
+    void await_resume() noexcept {
         // 取消注册所有case的等待者
         for (auto& case_ptr : cases_) {
             case_ptr->unregister_waiter();
         }
         
-        return selected_case_;
+        // 执行选中case的回调已在try_execute中完成
+    }
+    
+    // 唤醒等待的协程
+    void wake_up(select_case* selected_case) {
+        selected_case_ = selected_case;
+        selected_case_->try_execute();
+        runtime::schedule(handle_);
     }
     
 private:
     std::vector<std::unique_ptr<select_case>> cases_;
     select_case* selected_case_ = nullptr;
+    std::coroutine_handle<> handle_;
 };
-
-// Select函数
-template <typename... Cases>
-select_task<Cases...> select_impl(Cases&&... cases) {
-    co_await std::suspend_always{};
-    
-    // 创建promise对象
-    typename select_task<Cases...>::promise_type promise;
-    promise.cases_.reserve(sizeof...(Cases));
-    
-    // 收集所有case
-    ([&promise](auto& case_obj) {
-        promise.cases_.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
-            std::forward<decltype(case_obj)>(case_obj)));
-    }(cases), ...);
-    
-    co_return;
-}
-
-template <typename... Cases>
-auto select(Cases&&... cases) {
-    return select_impl(std::forward<Cases>(cases)...);
-}
 
 // 协程等待select
 template <typename... Cases>
@@ -269,11 +251,61 @@ auto co_select(Cases&&... cases) {
     return select_awaiter(std::move(case_ptrs));
 }
 
+// 简化的select函数，直接执行select逻辑
+template <typename... Cases>
+void select(Cases&&... cases) {
+    // 收集所有case到vector中
+    std::vector<std::unique_ptr<select_case>> case_ptrs;
+    case_ptrs.reserve(sizeof...(Cases));
+    
+    // 收集所有case
+    ([&case_ptrs](auto& case_obj) {
+        case_ptrs.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
+            std::forward<decltype(case_obj)>(case_obj)));
+    }(cases), ...);
+    
+    // 随机打乱顺序，实现公平性
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(case_ptrs.begin(), case_ptrs.end(), g);
+    
+    // 尝试立即执行case
+    for (auto& case_ptr : case_ptrs) {
+        if (case_ptr->try_ready()) {
+            case_ptr->try_execute();
+            return;
+        }
+    }
+    
+    // 如果没有立即可执行的case，检查是否有默认case
+    for (auto& case_ptr : case_ptrs) {
+        if (case_ptr->type() == select_case_type::default_case) {
+            case_ptr->try_execute();
+            return;
+        }
+    }
+    
+    // 如果没有默认case，忙等待直到有case可执行
+    while (true) {
+        // 随机打乱顺序，实现公平性
+        std::shuffle(case_ptrs.begin(), case_ptrs.end(), g);
+        
+        for (auto& case_ptr : case_ptrs) {
+            if (case_ptr->try_ready()) {
+                case_ptr->try_execute();
+                return;
+            }
+        }
+        
+        // 短暂睡眠，减少CPU占用
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
+}
+
 // 辅助函数：创建接收case
 template <typename T>
 auto case_recv(channel<T>& ch, T& value) {
-    auto c = recv_case<T>(ch, value);
-    return c;
+    return recv_case<T>(ch, value);
 }
 
 template <typename T>
@@ -332,9 +364,8 @@ public:
     bool try_execute() override {
         if (callback_) {
             callback_();
-            return true;
         }
-        return false;
+        return true;
     }
     
     bool try_ready() override {
