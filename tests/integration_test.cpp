@@ -18,7 +18,7 @@
     } while(0)
 
 void test_producer_consumer_pattern() {
-    std::cout << "测试生产者-消费者模式..." << std::endl);
+    std::cout << "测试生产者-消费者模式..." << std::endl;
     const int num_producers = 3;
     const int num_consumers = 2;
     const int items_per_producer = 50;
@@ -60,7 +60,7 @@ void test_producer_consumer_pattern() {
 }
 
 void test_pipeline_pattern() {
-    std::cout << "测试管道模式..." << std::endl);
+    std::cout << "测试管道模式..." << std::endl;
     const int pipeline_stages = 4;
     const int num_items = 20;
     
@@ -103,7 +103,7 @@ void test_pipeline_pattern() {
 }
 
 void test_fan_out_pattern() {
-    std::cout << "测试扇出模式..." << std::endl);
+    std::cout << "测试扇出模式..." << std::endl;
     const int num_workers = 4;
     const int items_per_worker = 25;
     tang::channel<int> input(50);
@@ -241,7 +241,7 @@ void test_fan_in_pattern() {
 }
 
 void test_parallel_computation() {
-    std::cout << "测试并行计算..." << std::endl);
+    std::cout << "测试并行计算..." << std::endl;
     const int num_workers = 4;
     const int chunk_size = 1000;
     tang::channel<int> chunks(10);
@@ -299,7 +299,7 @@ void test_parallel_computation() {
 }
 
 void test_concurrent_accumulation() {
-    std::cout << "测试并发累加..." << std::endl);
+    std::cout << "测试并发累加..." << std::endl;
     const int num_accumulators = 4;
     const int increments_per_accumulator = 1000;
     tang::channel<int> channel(10);
@@ -338,7 +338,7 @@ void test_concurrent_accumulation() {
 }
 
 void test_barrier_pattern() {
-    std::cout << "测试屏障模式..." << std::endl);
+    std::cout << "测试屏障模式..." << std::endl;
     const int num_workers = 4;
     const int phases = 3;
     tang::channel<int> barrier(10);
@@ -370,7 +370,7 @@ void test_barrier_pattern() {
 }
 
 void test_broadcast_pattern() {
-    std::cout << "测试广播模式..." << std::endl);
+    std::cout << "测试广播模式..." << std::endl;
     const int num_subscribers = 4;
     std::vector<tang::channel<int>> subscriber_channels(num_subscribers);
     std::atomic_int messages_delivered{0};
@@ -405,7 +405,7 @@ void test_broadcast_pattern() {
 }
 
 void test_work_stealing_simulation() {
-    std::cout << "测试工作窃取模拟..." << std::endl);
+    std::cout << "测试工作窃取模拟..." << std::endl;
     const int num_threads = 4;
     const int tasks_per_thread = 10;
     std::vector<tang::channel<int>> local_queues(num_threads);
