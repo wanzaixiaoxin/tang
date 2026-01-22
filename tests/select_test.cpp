@@ -303,7 +303,6 @@ tang::task<void> test_select_timeout() {
 tang::task<void> test_select_many_channels() {
     std::cout << "测试大量channel的select..." << std::endl;
     // 不使用vector，直接使用多个独立的channel变量
-    const int num_channels = 10;
     std::atomic_int selected_channel = -1;
     
     // 使用独立的channel数组代替vector

@@ -17,6 +17,12 @@ find_package(Threads REQUIRED)
 add_compile_options(-Wall -Wextra -Wpedantic -fcoroutines)
 add_link_options(-fcoroutines)
 
+# 根据编译模式设置不同的编译选项
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -DDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g -O2 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
+
 # 设置编译器特定标志
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message(STATUS "使用G++编译器: ${CMAKE_CXX_COMPILER_VERSION}")
