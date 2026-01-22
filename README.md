@@ -54,6 +54,8 @@ cd build
 
 # 配置 CMake
 cmake ..
+# 配置 MinGW Makefiles
+#cmake .. -G "MinGW Makefiles" -DCMAKE_CXX_COMPILER=g++
 
 # 编译
 cmake --build .

@@ -13,17 +13,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 
-# 强制使用G++编译选项
+# 添加G++编译选项
 add_compile_options(-Wall -Wextra -Wpedantic -fcoroutines)
 add_link_options(-fcoroutines)
 
 # 设置编译器特定标志
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message(STATUS "使用G++编译器: ${CMAKE_CXX_COMPILER_VERSION}")
-    add_compile_options(-fcoroutines)
-    add_link_options(-fcoroutines)
 else()
     message(WARNING "检测到非G++编译器: ${CMAKE_CXX_COMPILER_ID}")
+    message(WARNING "已强制设置为G++编译器，请确保系统中已安装g++")
     message(WARNING "建议使用G++编译器以获得最佳C++20协程支持")
 endif()
 

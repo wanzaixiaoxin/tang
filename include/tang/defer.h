@@ -2,6 +2,7 @@
 #define TANG_DEFER_H
 
 #include <functional>
+#include <utility>
 
 namespace tang {
 
@@ -34,7 +35,13 @@ private:
 #define TANG_DEFER_VAR_NAME(line) TANG_DEFER_CONCAT(__defer_, line)
 
 // 支持 defer { ... } 语法
+// defer macro: executes the given scope at the end of the surrounding scope
+// Usage: defer { /* code to run on exit */ } end_defer
 #define defer \
     tang::defer_guard TANG_DEFER_VAR_NAME(__LINE__) = tang::defer_guard([&]() 
+
+// end_defer macro: closes the defer scope and completes the guard object
+// This is paired with the defer macro above to form a complete statement
+#define end_defer );
 
 #endif // TANG_DEFER_H
