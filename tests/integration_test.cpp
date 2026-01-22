@@ -457,7 +457,7 @@ void test_work_stealing_simulation() {
 }
 
 void test_cancellation_simulation() {
-    std::cout << "测试取消模拟..." << std::endl);
+    std::cout << "测试取消模拟..." << std::endl;
     const int num_workers = 4;
     tang::channel<int> work_queue(20);
     tang::channel<bool> cancel_signal(1);
