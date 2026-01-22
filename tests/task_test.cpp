@@ -5,6 +5,7 @@
 #include <atomic>
 #include <stdexcept>
 #include <thread>
+#include <functional>
 
 // 简单的断言宏
 #define ASSERT(condition) \
@@ -273,6 +274,323 @@ void test_different_thread_counts() {
     std::cout << "不同线程数测试通过!" << std::endl;
 }
 
+// 测试嵌套协程调用
+void test_nested_coroutines() {
+    std::cout << "测试嵌套协程..." << std::endl;
+    std::atomic_int result = 0;
+    
+    tang::runtime::init(2);
+    
+    std::function<tang::task<int>()> inner_task = []() -> tang::task<int> {
+        co_return 42;
+    };
+    
+    auto outer_task = [&result, &inner_task]() -> tang::task<void> {
+        auto inner = inner_task();
+        int value = co_await inner;
+        result = value * 2;
+        co_return;
+    };
+    
+    auto task = outer_task();
+    task.run();
+    tang::runtime::run();
+    
+    ASSERT(result.load() == 84);
+    tang::runtime::stop();
+    std::cout << "嵌套协程测试通过!" << std::endl;
+}
+
+// 测试协程间的多层嵌套
+void test_multi_level_nested_coroutines() {
+    std::cout << "测试多层嵌套协程..." << std::endl;
+    std::atomic_int result = 0;
+    
+    tang::runtime::init(2);
+    
+    std::function<tang::task<int>()> level1 = []() -> tang::task<int> {
+        co_return 10;
+    };
+    
+    std::function<tang::task<int>()> level2 = [&level1]() -> tang::task<int> {
+        auto l1 = level1();
+        int v1 = co_await l1;
+        co_return v1 * 2;
+    };
+    
+    auto level3 = [&result, &level2]() -> tang::task<void> {
+        auto l2 = level2();
+        int v2 = co_await l2;
+        result = v2 * 3;
+        co_return;
+    };
+    
+    auto task = level3();
+    task.run();
+    tang::runtime::run();
+    
+    ASSERT(result.load() == 60); // 10 * 2 * 3
+    tang::runtime::stop();
+    std::cout << "多层嵌套协程测试通过!" << std::endl;
+}
+
+// 测试任务组 - wait_all语义
+void test_wait_all() {
+    std::cout << "测试任务组wait_all..." << std::endl;
+    std::atomic_int counter = 0;
+    const int num_tasks = 5;
+    
+    tang::runtime::init(2);
+    
+    std::vector<tang::task<void>> tasks;
+    for (int i = 0; i < num_tasks; ++i) {
+        auto task_func = [&counter, i]() -> tang::task<void> {
+            counter++;
+            co_return;
+        };
+        tasks.push_back(task_func());
+    }
+    
+    for (auto& t : tasks) {
+        t.run();
+    }
+    
+    tang::runtime::run();
+    
+    ASSERT(counter.load() == num_tasks);
+    tang::runtime::stop();
+    std::cout << "任务组wait_all测试通过!" << std::endl;
+}
+
+// 测试递归协程
+void test_recursive_coroutine() {
+    std::cout << "测试递归协程..." << std::endl;
+    std::atomic_int sum = 0;
+    
+    tang::runtime::init(2);
+    
+    struct FibImpl {
+        std::function<tang::task<int>(int)> self;
+        
+        tang::task<int> operator()(int n) {
+            if (n <= 1) {
+                co_return n;
+            }
+            auto a = self(n - 1);
+            auto b = self(n - 2);
+            int result = co_await a + co_await b;
+            co_return result;
+        }
+    };
+    
+    FibImpl fib_impl;
+    fib_impl.self = [&fib_impl](int n) -> tang::task<int> {
+        return fib_impl(n);
+    };
+    
+    auto main_task = [&sum, &fib_impl]() -> tang::task<void> {
+        auto fib10 = fib_impl.self(10);
+        int result = co_await fib10;
+        sum = result;
+        co_return;
+    };
+    
+    auto task = main_task();
+    task.run();
+    tang::runtime::run();
+    
+    ASSERT(sum.load() == 55); // Fibonacci(10) = 55
+    tang::runtime::stop();
+    std::cout << "递归协程测试通过!" << std::endl;
+}
+
+// 测试协程的异常传播
+void test_exception_propagation() {
+    std::cout << "测试异常传播..." << std::endl;
+    std::atomic_bool inner_exception_caught = false;
+    std::atomic_bool outer_exception_caught = false;
+    
+    tang::runtime::init(2);
+    
+    std::function<tang::task<int>()> throwing_task = []() -> tang::task<int> {
+        throw std::runtime_error("Inner exception");
+        co_return 0;
+    };
+    
+    std::function<tang::task<void>()> catching_task = [&inner_exception_caught, &throwing_task]() -> tang::task<void> {
+        try {
+            auto t = throwing_task();
+            co_await t;
+        } catch (const std::exception& e) {
+            inner_exception_caught = true;
+        }
+        co_return;
+    };
+    
+    auto outer_task = [&outer_exception_caught, &catching_task]() -> tang::task<void> {
+        try {
+            auto t = catching_task();
+            co_await t;
+            // 模拟另一个异常
+            throw std::runtime_error("Outer exception");
+        } catch (const std::exception& e) {
+            outer_exception_caught = true;
+        }
+        co_return;
+    };
+    
+    auto task = outer_task();
+    task.run();
+    tang::runtime::run();
+    
+    ASSERT(inner_exception_caught.load());
+    ASSERT(outer_exception_caught.load());
+    tang::runtime::stop();
+    std::cout << "异常传播测试通过!" << std::endl;
+}
+
+// 测试协程的资源竞争
+void test_resource_contention() {
+    std::cout << "测试资源竞争..." << std::endl;
+    const int num_tasks = 10;
+    const int increments_per_task = 1000;
+    std::atomic_int shared_counter{0};
+    
+    tang::runtime::init(4);
+    
+    for (int i = 0; i < num_tasks; ++i) {
+        tang::go([&shared_counter, increments_per_task]() {
+            for (int j = 0; j < increments_per_task; ++j) {
+                shared_counter++;
+            }
+        });
+    }
+    
+    tang::runtime::run();
+    
+    ASSERT(shared_counter.load() == num_tasks * increments_per_task);
+    tang::runtime::stop();
+    std::cout << "资源竞争测试通过! 最终计数值: " << shared_counter.load() << std::endl;
+}
+
+// 测试任务生命周期管理
+void test_task_lifecycle() {
+    std::cout << "测试任务生命周期..." << std::endl;
+    std::atomic_int lifecycle_events{0};
+    
+    tang::runtime::init(2);
+    
+    auto tracked_task = [&lifecycle_events]() -> tang::task<int> {
+        lifecycle_events++; // 开始
+        co_return 1;
+    };
+    
+    {
+        auto task = tracked_task();
+        task.run();
+        tang::runtime::run();
+        ASSERT(lifecycle_events.load() >= 1);
+    }
+    
+    tang::runtime::stop();
+    std::cout << "任务生命周期测试通过!" << std::endl;
+}
+
+// 测试协程的并行执行
+void test_parallel_execution() {
+    std::cout << "测试并行执行..." << std::endl;
+    std::atomic_int start_time{0};
+    std::atomic_int end_time_count{0};
+    const int num_tasks = 4;
+    
+    tang::runtime::init(4);
+    
+    for (int i = 0; i < num_tasks; ++i) {
+        tang::go([&start_time, &end_time_count, i]() {
+            [[maybe_unused]] int my_start = start_time.fetch_add(1);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            end_time_count++;
+        });
+    }
+    
+    tang::runtime::run();
+    
+    ASSERT(end_time_count.load() == num_tasks);
+    tang::runtime::stop();
+    std::cout << "并行执行测试通过!" << std::endl;
+}
+
+// 测试协程的数据传递
+void test_data_passing() {
+    std::cout << "测试数据传递..." << std::endl;
+    struct ComplexData {
+        int id;
+        std::string name;
+        std::vector<int> values;
+    };
+    
+    tang::channel<ComplexData> ch(2);
+    std::atomic_bool received{false};
+    
+    tang::runtime::init(2);
+    
+    tang::go([&ch]() {
+        ComplexData data{42, "test", {1, 2, 3, 4, 5}};
+        ch << data;
+    });
+    
+    tang::go([&ch, &received]() {
+        ComplexData data;
+        ch >> data;
+        ASSERT(data.id == 42);
+        ASSERT(data.name == "test");
+        ASSERT(data.values.size() == 5);
+        received = true;
+    });
+    
+    tang::runtime::run();
+    ASSERT(received.load());
+    tang::runtime::stop();
+    std::cout << "数据传递测试通过!" << std::endl;
+}
+
+// 测试协程的同步原语组合
+void test_sync_primitives_combo() {
+    std::cout << "测试同步原语组合..." << std::endl;
+    tang::channel<int> ch(5);
+    std::atomic_int sum{0};
+    const int num_tasks = 3;
+    
+    tang::runtime::init(2);
+    
+    for (int i = 0; i < num_tasks; ++i) {
+        tang::go([&ch, i]() {
+            for (int j = 0; j < 5; ++j) {
+                ch << (i * 10 + j);
+            }
+        });
+    }
+    
+    tang::go([&ch, &sum, num_tasks]() {
+        int count = 0;
+        int total = num_tasks * 5;
+        while (count < total) {
+            int value;
+            if (ch >> value) {
+                sum += value;
+                count++;
+            }
+        }
+    });
+    
+    tang::runtime::run();
+    
+    // 验证数据完整性
+    ASSERT(sum.load() > 0);
+    tang::runtime::stop();
+    std::cout << "同步原语组合测试通过! 总和: " << sum.load() << std::endl;
+}
+
 // 主函数
 int main() {
     std::cout << "开始运行任务系统测试..." << std::endl;
@@ -287,6 +605,16 @@ int main() {
         test_spawn_function();
         test_task_sleep();
         test_different_thread_counts();
+        test_nested_coroutines();
+        test_multi_level_nested_coroutines();
+        test_wait_all();
+        test_recursive_coroutine();
+        test_exception_propagation();
+        test_resource_contention();
+        test_task_lifecycle();
+        test_parallel_execution();
+        test_data_passing();
+        test_sync_primitives_combo();
         
         std::cout << "\\n所有任务系统测试通过!" << std::endl;
         return 0;

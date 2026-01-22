@@ -5,6 +5,8 @@ set(TESTS
     task_test
     channel_test
     select_test
+    runtime_test
+    integration_test
 )
 
 # 为每个测试创建可执行文件（独立版本，不依赖Google Test）
