@@ -75,11 +75,19 @@ private:
     /**
      * Format log message
      */
-    std::string format_message(LogLevel message_level, const std::string& message) const {
+    std::string format_message(LogLevel message_level, const std::string& message, const std::string& file, int line) const {
+        // Extract filename from path
+        std::string filename = file;
+        size_t last_slash = file.find_last_of("/\\");
+        if (last_slash != std::string::npos) {
+            filename = file.substr(last_slash + 1);
+        }
+        
         std::stringstream ss;
-        ss << "[" << get_timestamp() << "] "
-           << "[" << get_level_string(message_level) << "] "
-           << "[" << module_name_ << "] "
+        ss << "[" << get_timestamp() << "]"
+           << "[" << get_level_string(message_level) << "]"
+           << "[" << module_name_ << "]"
+           << "[" << filename << ":" << line << "] "
            << message;
         return ss.str();
     }
@@ -109,36 +117,36 @@ public:
     /**
      * Log a debug message
      */
-    void debug(const std::string& message) {
+    void debug(const std::string& message, const std::string& file, int line) {
         if (should_log(LogLevel::DEBUG_LEVEL)) {
-            output_message(LogLevel::DEBUG_LEVEL, format_message(LogLevel::DEBUG_LEVEL, message));
+            output_message(LogLevel::DEBUG_LEVEL, format_message(LogLevel::DEBUG_LEVEL, message, file, line));
         }
     }
     
     /**
      * Log an info message
      */
-    void info(const std::string& message) {
+    void info(const std::string& message, const std::string& file, int line) {
         if (should_log(LogLevel::INFO_LEVEL)) {
-            output_message(LogLevel::INFO_LEVEL, format_message(LogLevel::INFO_LEVEL, message));
+            output_message(LogLevel::INFO_LEVEL, format_message(LogLevel::INFO_LEVEL, message, file, line));
         }
     }
     
     /**
      * Log a warning message
      */
-    void warn(const std::string& message) {
+    void warn(const std::string& message, const std::string& file, int line) {
         if (should_log(LogLevel::WARN_LEVEL)) {
-            output_message(LogLevel::WARN_LEVEL, format_message(LogLevel::WARN_LEVEL, message));
+            output_message(LogLevel::WARN_LEVEL, format_message(LogLevel::WARN_LEVEL, message, file, line));
         }
     }
     
     /**
      * Log an error message
      */
-    void error(const std::string& message) {
+    void error(const std::string& message, const std::string& file, int line) {
         if (should_log(LogLevel::ERROR_LEVEL)) {
-            output_message(LogLevel::ERROR_LEVEL, format_message(LogLevel::ERROR_LEVEL, message));
+            output_message(LogLevel::ERROR_LEVEL, format_message(LogLevel::ERROR_LEVEL, message, file, line));
         }
     }
     
@@ -177,18 +185,18 @@ namespace logger {
 }
 
 // Convenience macros for logging
-#define LOG_DEBUG(logger, msg) logger.debug(msg)
-#define LOG_INFO(logger, msg) logger.info(msg)
-#define LOG_WARN(logger, msg) logger.warn(msg)
-#define LOG_ERROR(logger, msg) logger.error(msg)
+#define LOG_DEBUG(logger, msg) logger.debug(msg, __FILE__, __LINE__)
+#define LOG_INFO(logger, msg) logger.info(msg, __FILE__, __LINE__)
+#define LOG_WARN(logger, msg) logger.warn(msg, __FILE__, __LINE__)
+#define LOG_ERROR(logger, msg) logger.error(msg, __FILE__, __LINE__)
 
-#define LOG_DEBUG_FUNC(logger) logger.debug(std::string(__FUNCTION__) + " called")
+#define LOG_DEBUG_FUNC(logger) logger.debug(std::string(__FUNCTION__) + " called", __FILE__, __LINE__)
 #define LOG_DEBUG_FUNC_WITH_HANDLE(logger, handle) \
     do { \
         std::stringstream ss; \
         ss << __FUNCTION__ << " - handle: " << (handle ? "valid" : "null") \
            << ", done: " << (handle ? (handle.done() ? "true" : "false") : "N/A"); \
-        logger.debug(ss.str()); \
+        logger.debug(ss.str(), __FILE__, __LINE__); \
     } while(0)
 
 } // namespace tang

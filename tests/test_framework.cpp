@@ -11,6 +11,8 @@ TestFramework& get_test_framework() {
 
 // Main function for running tests
 int run_tests(int argc, char* argv[]) {
+    (void)argc; 
+    (void)argv; 
     try {
         LOG_INFO(tang::logger::test, "Starting test framework...");
         

@@ -178,8 +178,6 @@ void scheduler::run() {
                 DEBUG_LOG("Main thread coroutine completed");
             }
         } else {
-            // No more tasks, break the loop
-            DEBUG_LOG("No more tasks to process");
             break;
         }
         
@@ -316,7 +314,6 @@ void schedule(std::coroutine_handle<> handle) {
 
 void yield() {
     std::this_thread::yield();
-    // 让出CPU时间片，但不调度空句柄
     std::this_thread::sleep_for(std::chrono::microseconds(1));
 }
 

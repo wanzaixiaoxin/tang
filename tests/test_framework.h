@@ -15,43 +15,6 @@
 namespace tang {
 namespace test {
 
-// Runtime management helpers
-class RuntimeScope {
-private:
-    static std::unique_ptr<tang::RuntimeScope> global_runtime_;
-    
-public:
-    /**
-     * @brief Initialize the global runtime
-     * 
-     * @param threads Number of worker threads
-     */
-    static void init(size_t threads = 2) {
-        if (!global_runtime_) {
-            global_runtime_ = std::make_unique<tang::RuntimeScope>(threads);
-        }
-    }
-    
-    /**
-     * @brief Run the global runtime
-     */
-    static void run() {
-        if (global_runtime_) {
-            global_runtime_->run();
-        }
-    }
-    
-    /**
-     * @brief Cleanup the global runtime
-     */
-    static void cleanup() {
-        global_runtime_.reset();
-    }
-};
-
-// Global runtime instance
-inline std::unique_ptr<tang::RuntimeScope> RuntimeScope::global_runtime_ = nullptr;
-
 /**
  * Test case result
  */
