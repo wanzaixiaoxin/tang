@@ -18,9 +18,9 @@ namespace logger {
      */
     void init() {
         // Default initialization - can be extended to read from config file
-        runtime.set_level(LogLevel::DEBUG_LEVEL);
-        channel.set_level(LogLevel::DEBUG_LEVEL);
-        task.set_level(LogLevel::DEBUG_LEVEL);
+        runtime.set_level(LogLevel::INFO_LEVEL);
+        channel.set_level(LogLevel::INFO_LEVEL);
+        task.set_level(LogLevel::INFO_LEVEL);
         test.set_level(LogLevel::DEBUG_LEVEL);
         example.set_level(LogLevel::DEBUG_LEVEL);
     }

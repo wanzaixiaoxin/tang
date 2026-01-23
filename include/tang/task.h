@@ -48,34 +48,20 @@ public:
         task get_return_object() {
             return task(std::coroutine_handle<promise_type>::from_promise(*this));
         }
-        
-        std::suspend_always initial_suspend() noexcept {
+
+        std::suspend_never initial_suspend() noexcept {
             return {};
         }
         
-        struct final_awaiter {
-            bool await_ready() noexcept { return false; }
-            
-            template <typename PromiseType>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> handle) noexcept {
-                auto& promise = handle.promise();
-                if (promise.continuation) {
-                    return promise.continuation;
-                }
-                return std::noop_coroutine();
-            }
-            
-            void await_resume() noexcept {}
-        };
-        
-        final_awaiter final_suspend() noexcept {
+        std::suspend_never final_suspend() noexcept {
+            LOG_DEBUG(tang::logger::task, "final_suspend called");
             return {};
         }
-        
+
         void return_value(T value) noexcept {
             result.emplace(std::move(value));
         }
-        
+
         void unhandled_exception() noexcept {
             exception = std::current_exception();
         }
@@ -133,17 +119,22 @@ public:
     }
     
     void run() {
-    TASK_DEBUG_LOG_FUNC();
-    TASK_DEBUG_LOG_HANDLE(handle);
-    
-    if (handle) {
-        TASK_DEBUG_LOG("Scheduling task");
-        runtime::schedule(handle);
-        TASK_DEBUG_LOG("Task scheduled");
-    } else {
-        TASK_DEBUG_LOG("No handle to schedule");
+        TASK_DEBUG_LOG_FUNC();
+        TASK_DEBUG_LOG_HANDLE(handle);
+
+        if (handle) {
+            // If coroutine is already completed (may happen with suspend_never), no need to schedule
+            if (handle.done()) {
+                TASK_DEBUG_LOG("Task already done, skipping schedule");
+                return;
+            }
+            TASK_DEBUG_LOG("Scheduling task");
+            runtime::schedule(handle);
+            TASK_DEBUG_LOG("Task scheduled");
+        } else {
+            TASK_DEBUG_LOG("No handle to schedule");
+        }
     }
-}
     
 private:
     handle_type handle;
@@ -156,36 +147,21 @@ public:
     struct promise_type {
         std::exception_ptr exception;
         std::coroutine_handle<> continuation;
-        
+
         task get_return_object() {
             return task(std::coroutine_handle<promise_type>::from_promise(*this));
         }
-        
-        std::suspend_always initial_suspend() noexcept {
+
+        std::suspend_never initial_suspend() noexcept {
             return {};
         }
-        
-        struct final_awaiter {
-            bool await_ready() noexcept { return false; }
-            
-            template <typename PromiseType>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> handle) noexcept {
-                auto& promise = handle.promise();
-                if (promise.continuation) {
-                    return promise.continuation;
-                }
-                return std::noop_coroutine();
-            }
-            
-            void await_resume() noexcept {}
-        };
-        
-        final_awaiter final_suspend() noexcept {
+
+        std::suspend_never final_suspend() noexcept {
             return {};
         }
-        
+
         void return_void() noexcept {}
-        
+
         void unhandled_exception() noexcept {
             exception = std::current_exception();
         }
@@ -242,6 +218,10 @@ public:
     
     void run() {
         if (handle) {
+            // If coroutine is already completed (may happen with suspend_never), no need to schedule
+            if (handle.done()) {
+                return;
+            }
             runtime::schedule(handle);
         }
     }
@@ -281,7 +261,7 @@ auto go(F&& f, Args&&... args) {
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
     
     TASK_DEBUG_LOG("Running task");
-    task.run(); // 立即调度任务
+    task.run(); // Schedule task immediately
     
     TASK_DEBUG_LOG("Task created and scheduled");
     return task;
@@ -291,7 +271,7 @@ template <typename F, typename... Args>
 auto spawn(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
-    task.run(); // 立即调度任务
+    task.run(); // Schedule task immediately
     return task;
 }
 

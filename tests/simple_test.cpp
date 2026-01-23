@@ -8,17 +8,25 @@
  */
 TEST2(basic_coroutine,true) {
     tang::RuntimeScope runtime(1);
-    
+
     std::atomic_bool executed = false;
-    
+
+    LOG_INFO(tang::logger::test, "Before creating coroutine, executed = " + std::to_string(executed.load()));
+
     // Create a simple coroutine
     tang::go([&executed]() {
+        LOG_INFO(tang::logger::test, "Inside coroutine, setting executed to true");
         executed = true;
+        LOG_INFO(tang::logger::test, "Inside coroutine, executed = " + std::to_string(executed.load()));
     });
-    
+
+    LOG_INFO(tang::logger::test, "After creating coroutine, executed = " + std::to_string(executed.load()));
+
     // Run scheduler
     runtime.run();
-    
+
+    LOG_INFO(tang::logger::test, "After runtime.run(), executed = " + std::to_string(executed.load()));
+
     // Verify coroutine execution
     ASSERT_TRUE(executed.load());
 }

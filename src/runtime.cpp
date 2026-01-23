@@ -156,9 +156,10 @@ void scheduler::run() {
             }
             
             DEBUG_LOG("Main thread resuming coroutine");
-            
+
             try {
                 handle.resume();
+                DEBUG_LOG("Main thread resume() returned");
             } catch (const std::exception& e) {
                 DEBUG_LOG("Main thread coroutine resume failed: " << e.what());
                 iteration++;
@@ -168,14 +169,16 @@ void scheduler::run() {
                 iteration++;
                 continue;
             }
-            
+
             // Check if coroutine is done
             if (!handle.done()) {
                 DEBUG_LOG("Main thread coroutine not done, re-scheduling");
                 // Re-schedule the coroutine if it's not done
                 schedule(handle);
             } else {
-                DEBUG_LOG("Main thread coroutine completed");
+                DEBUG_LOG("Main thread coroutine completed, final_suspend returned noop_coroutine");
+                // 协程已完成，不再重新调度
+                // 协程帧会在 task 析构时销毁
             }
         } else {
             break;
