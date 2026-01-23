@@ -6,7 +6,7 @@
 /**
  * Test basic coroutine functionality
  */
-TEST(basic_coroutine) {
+TEST2(basic_coroutine,true) {
     tang::RuntimeScope runtime(1);
     
     std::atomic_bool executed = false;
@@ -26,7 +26,7 @@ TEST(basic_coroutine) {
 /**
  * Test basic channel operation
  */
-TEST(basic_channel_operation) {
+TEST2(basic_channel_operation,false) {
     tang::RuntimeScope runtime(1);
     
     tang::channel<int> ch;
@@ -51,7 +51,7 @@ TEST(basic_channel_operation) {
 /**
  * Test channel with multiple operations
  */
-TEST(channel_multiple_operations) {
+TEST2(channel_multiple_operations,false) {
     tang::RuntimeScope runtime(2);
     
     tang::channel<int> ch(5); // Buffered channel with capacity 5
@@ -82,7 +82,7 @@ TEST(channel_multiple_operations) {
 /**
  * Test channel closure
  */
-TEST(channel_closure) {
+TEST2(channel_closure,false) {
     tang::RuntimeScope runtime(1);
     
     tang::channel<int> ch;
@@ -110,7 +110,7 @@ TEST(channel_closure) {
 /**
  * Test coroutine with sleep
  */
-TEST(coroutine_with_sleep) {
+TEST2(coroutine_with_sleep,false) {
     tang::RuntimeScope runtime(1);
     
     std::atomic_bool executed{false};

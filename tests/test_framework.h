@@ -184,6 +184,17 @@ TestFramework& get_test_framework();
 int run_tests(int argc, char* argv[]);
 
 // Test registration macro
+#define TEST2(test_name,flag) \
+    void test_##test_name(); \
+    struct TestRegistrar_##test_name { \
+        TestRegistrar_##test_name() { \
+            if(flag) { \
+                tang::test::get_test_framework().add_test(#test_name, test_##test_name); \
+            } \
+        } \
+    } test_registrar_##test_name; \
+    void test_##test_name()
+
 #define TEST(test_name) \
     void test_##test_name(); \
     struct TestRegistrar_##test_name { \
