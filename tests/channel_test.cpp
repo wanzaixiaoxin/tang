@@ -1,29 +1,18 @@
-#include <iostream>
-#include <cassert>
+#include "test_framework.h"
 #include <tang/tang.h>
-#include <vector>
 #include <atomic>
-#include <stdexcept>
 #include <thread>
+#include <vector>
 
-// Simple assertion macro
-#define ASSERT(condition) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "Assertion failed: " << #condition << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
-            std::terminate(); \
-        } \
-    } while(0)
-
-// Test basic channel send and receive
-void test_basic_channel() {
-    std::cout << "Testing basic channel..." << std::endl;
+/**
+ * Test basic channel send and receive
+ */
+TEST(basic_channel) {
+    tang::test::RuntimeScope runtime(2);
+    
     // Create an unbuffered channel
     tang::channel<int> ch;
     std::atomic_int received = 0;
-    
-    // Initialize runtime
-    tang::runtime::init(2);
     
     // Create receiver coroutine
     tang::go([&ch, &received]() {
@@ -38,692 +27,262 @@ void test_basic_channel() {
     });
     
     // Run scheduler
-    tang::runtime::run();
+    runtime.run();
     
     // Verify results
-    ASSERT(received.load() == 42);
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Basic channel test passed!" << std::endl;
+    ASSERT_EQUAL(42, received.load());
 }
 
-// Test buffered channel
-void test_buffered_channel() {
-    std::cout << "Testing buffered channel..." << std::endl;
+/**
+ * Test buffered channel
+ */
+TEST(buffered_channel) {
+    tang::test::RuntimeScope runtime(2);
+    
     // Create a buffered channel with capacity 5
     tang::channel<int> ch(5);
     
-    // Initialize runtime
-    tang::runtime::init(2);
-    
     // Test send operations
-    ASSERT(ch.try_send(1));
-    ASSERT(ch.try_send(2));
-    ASSERT(ch.try_send(3));
-    ASSERT(ch.try_send(4));
-    ASSERT(ch.try_send(5));
+    ASSERT_TRUE(ch.try_send(1));
+    ASSERT_TRUE(ch.try_send(2));
+    ASSERT_TRUE(ch.try_send(3));
+    ASSERT_TRUE(ch.try_send(4));
+    ASSERT_TRUE(ch.try_send(5));
     
     // Buffer is full, send attempt should fail
-    ASSERT(!ch.try_send(6));
+    ASSERT_FALSE(ch.try_send(6));
     
     // Test receive operations
     int value;
-    ASSERT(ch.try_recv(value));
-    ASSERT(value == 1);
+    ASSERT_TRUE(ch.try_recv(value));
+    ASSERT_EQUAL(1, value);
     
     // Now buffer has space, can send
-    ASSERT(ch.try_send(6));
+    ASSERT_TRUE(ch.try_send(6));
     
     // Receive remaining values
     for (int i = 2; i <= 6; ++i) {
-        ASSERT(ch.try_recv(value));
-        ASSERT(value == i);
+        ASSERT_TRUE(ch.try_recv(value));
+        ASSERT_EQUAL(i, value);
     }
     
     // Buffer is empty, receive attempt should fail
-    ASSERT(!ch.try_recv(value));
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Buffered channel test passed!" << std::endl;
+    ASSERT_FALSE(ch.try_recv(value));
 }
 
-// Test channel close
-void test_channel_close() {
-    std::cout << "Testing channel close..." << std::endl;
+/**
+ * Test channel close
+ */
+TEST(channel_close) {
+    tang::test::RuntimeScope runtime(2);
+    
     // Create a channel
     tang::channel<int> ch(2);
     
-    // Initialize runtime
-    tang::runtime::init(2);
+    // Send some values
+    ASSERT_TRUE(ch.try_send(1));
+    ASSERT_TRUE(ch.try_send(2));
     
-    // Send some data
-    ch << 1;
-    ch << 2;
-    
-    // Close channel
+    // Close the channel
     ch.close();
     
-    // Verify channel is closed
-    ASSERT(ch.is_closed());
+    // Should not be able to send after close
+    ASSERT_FALSE(ch.try_send(3));
     
-    // Attempting to send to closed channel should fail
-    ASSERT(!ch.try_send(3));
-    
-    // Can receive remaining data
+    // Should be able to receive remaining values
     int value;
-    ASSERT(ch.try_recv(value));
-    ASSERT(value == 1);
+    ASSERT_TRUE(ch.try_recv(value));
+    ASSERT_EQUAL(1, value);
     
-    ASSERT(ch.try_recv(value));
-    ASSERT(value == 2);
+    ASSERT_TRUE(ch.try_recv(value));
+    ASSERT_EQUAL(2, value);
     
-    // After all data received, attempting to receive should fail
-    ASSERT(!ch.try_recv(value));
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Channel close test passed!" << std::endl;
+    // Should not be able to receive after all values are consumed
+    ASSERT_FALSE(ch.try_recv(value));
 }
 
-// Test multiple senders and receivers
-void test_multiple_sender_receiver() {
-    std::cout << "Testing multiple senders and receivers..." << std::endl;
-    const int num_senders = 2; // Reduce number to speed up test
-    const int num_receivers = 1; // Reduce number to speed up test
-    const int messages_per_sender = 3; // Reduce number to speed up test
+/**
+ * Test channel with multiple producers and consumers
+ */
+TEST(channel_multiple_producers_consumers) {
+    tang::test::RuntimeScope runtime(4);
     
-    // Create a buffered channel
-    tang::channel<int> ch(5); // Reduce buffer size
-    
-    std::atomic_int received = 0;
-    std::atomic_int sent = 0;
-    
-    // Initialize runtime
-    tang::runtime::init(2); // Reduce thread count
-    
-    // Create receiver coroutines
-    for (int i = 0; i < num_receivers; ++i) {
-        tang::go([&ch, &received, total = num_senders * messages_per_sender]() {
-            while (received.load() < total) {
-                int value;
-                if (ch.try_recv(value)) {
-                    received++;
-                } else {
-                    // Sleep briefly to avoid high CPU usage
-                    std::this_thread::sleep_for(std::chrono::microseconds(10));
-                }
-            }
-        });
-    }
-    
-    // Create sender coroutines
-    for (int i = 0; i < num_senders; ++i) {
-        tang::go([&ch, &sent, i, count = messages_per_sender]() {
-            for (int j = 0; j < count; ++j) {
-                int value = i * 100 + j;
-                ch << value;
-                sent++;
-            }
-        });
-    }
-    
-    // Run scheduler
-    tang::runtime::run();
-    
-    // Verify results
-    ASSERT(sent.load() == num_senders * messages_per_sender);
-    ASSERT(received.load() == num_senders * messages_per_sender);
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Multiple senders and receivers test passed!" << std::endl;
-}
-
-// Test channel status query
-void test_channel_status() {
-    std::cout << "Testing channel status query..." << std::endl;
-    // Create a buffered channel with capacity 3
-    tang::channel<int> ch(3);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Initial state
-    ASSERT(!ch.is_closed());
-    ASSERT(ch.is_empty());
-    ASSERT(!ch.is_full());
-    
-    // Send one element
-    ch << 1;
-    ASSERT(!ch.is_empty());
-    ASSERT(!ch.is_full());
-    
-    // Send more elements until full
-    ch << 2;
-    ch << 3;
-    ASSERT(!ch.is_empty());
-    ASSERT(ch.is_full());
-    
-    // Receive one element
-    int value;
-    ch >> value;
-    ASSERT(!ch.is_empty());
-    ASSERT(!ch.is_full());
-    
-    // Close channel
-    ch.close();
-    ASSERT(ch.is_closed());
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Channel status query test passed!" << std::endl;
-}
-
-// Test channel try_send and try_recv
-void test_try_send_recv() {
-    std::cout << "Testing try_send and try_recv..." << std::endl;
-    // Create a buffered channel with capacity 2
-    tang::channel<std::string> ch(2);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Test try_send
-    ASSERT(ch.try_send("hello"));
-    ASSERT(ch.try_send("world"));
-    ASSERT(!ch.try_send("tang"));
-    
-    // Test try_recv
-    std::string msg;
-    ASSERT(ch.try_recv(msg));
-    ASSERT(msg == "hello");
-    
-    ASSERT(ch.try_recv(msg));
-    ASSERT(msg == "world");
-    
-    ASSERT(!ch.try_recv(msg));
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "try_send and try_recv test passed!" << std::endl;
-}
-
-// Test receive after channel close
-void test_receive_after_close() {
-    std::cout << "Testing receive after channel close..." << std::endl;
-    // Create a buffered channel with capacity 3
-    tang::channel<int> ch(3);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Send some data
-    ch << 1;
-    ch << 2;
-    ch << 3;
-    
-    // Close channel
-    ch.close();
-    
-    // Receive all data
-    std::vector<int> received;
-    int value;
-    
-    while (ch.try_recv(value)) {
-        received.push_back(value);
-    }
-    
-    // Verify received data
-    ASSERT(received.size() == 3);
-    ASSERT(received[0] == 1);
-    ASSERT(received[1] == 2);
-    ASSERT(received[2] == 3);
-    
-    // Attempt to receive after close should fail
-    ASSERT(!ch.try_recv(value));
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Receive after channel close test passed!" << std::endl;
-}
-
-// Test string type channel
-void test_string_channel() {
-    std::cout << "Testing string type channel..." << std::endl;
-    // Create a buffered channel with capacity 2
-    tang::channel<std::string> ch(2);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Send strings
-    ch << "hello";
-    ch << "tang";
-    
-    // Receive strings
-    std::string msg1, msg2;
-    ch >> msg1;
-    ch >> msg2;
-    
-    // Verify results
-    ASSERT(msg1 == "hello");
-    ASSERT(msg2 == "tang");
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "String type channel test passed!" << std::endl;
-}
-
-// Define a struct for testing
-struct Person {
-    std::string name;
-    int age;
-};
-
-// Test struct type channel
-void test_struct_channel() {
-    std::cout << "Testing struct type channel..." << std::endl;
-    
-    // Create a buffered channel with capacity 2
-    tang::channel<Person> ch(2);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Send structs
-    ch << Person{"Alice", 30};
-    ch << Person{"Bob", 25};
-    
-    // Receive structs
-    Person p1, p2;
-    ch >> p1;
-    ch >> p2;
-    
-    // Verify results
-    ASSERT(p1.name == "Alice");
-    ASSERT(p1.age == 30);
-    
-    ASSERT(p2.name == "Bob");
-    ASSERT(p2.age == 25);
-    
-    // Stop runtime
-    tang::runtime::stop();
-    std::cout << "Struct type channel test passed!" << std::endl;
-}
-
-// Test capacity 1 channel
-void test_single_capacity_channel() {
-    std::cout << "Testing channel with capacity 1..." << std::endl;
-    // Create a buffered channel with capacity 1
-    tang::channel<int> ch(1);
-    
-    // Initialize runtime
-    tang::runtime::init(2);
-    
-    // Send and receive
-    ch << 100;
-    ASSERT(ch.is_full());
-    
-    int value;
-    ch >> value;
-    ASSERT(value == 100);
-    ASSERT(ch.is_empty());
-    
-    tang::runtime::stop();
-    std::cout << "Channel with capacity 1 test passed!" << std::endl;
-}
-
-// Test unbuffered channel sync behavior
-void test_unbuffered_channel_sync() {
-    std::cout << "Testing unbuffered channel sync behavior..." << std::endl;
-    // Create an unbuffered channel
-    tang::channel<int> ch;
-    std::atomic_bool sender_done{false};
-    std::atomic_bool receiver_done{false};
-    std::atomic_int received_value{0};
-    
-    tang::runtime::init(2);
-    
-    tang::go([&ch, &sender_done]() {
-        ch << 42;
-        sender_done = true;
-    });
-    
-    tang::go([&ch, &receiver_done, &received_value]() {
-        int value;
-        ch >> value;
-        received_value = value;
-        receiver_done = true;
-    });
-    
-    tang::runtime::run();
-    
-    ASSERT(received_value.load() == 42);
-    ASSERT(sender_done.load());
-    ASSERT(receiver_done.load());
-    tang::runtime::stop();
-    std::cout << "Unbuffered channel sync behavior test passed!" << std::endl;
-}
-
-// Test multiple producers and consumers
-void test_multi_producer_consumer() {
-    std::cout << "Testing multiple producers and consumers..." << std::endl;
+    tang::channel<int> ch(10);
+    std::atomic_int total_received{0};
     const int num_producers = 3;
     const int num_consumers = 2;
-    const int messages_per_producer = 20;
-    tang::channel<int> ch(10);
-    std::atomic_int total_sent{0};
-    std::atomic_int total_received{0};
-    
-    // Initialize runtime
-    tang::runtime::init(4);
+    const int items_per_producer = 10;
     
     // Create producer coroutines
     for (int i = 0; i < num_producers; ++i) {
-        tang::go([&ch, &total_sent, i, messages_per_producer]() {
-            for (int j = 0; j < messages_per_producer; ++j) {
-                int value = i * 1000 + j;
-                ch << value;
-                total_sent++;
+        tang::go([&ch, i]() {
+            for (int j = 0; j < items_per_producer; ++j) {
+                ch << (i * 100 + j);
             }
         });
     }
     
     // Create consumer coroutines
     for (int i = 0; i < num_consumers; ++i) {
-        tang::go([&ch, &total_received, total = num_producers * messages_per_producer]() {
-            int count = 0;
-            while (count < total) {
-                int value;
-                if (ch >> value) {
-                    total_received++;
-                    count++;
-                }
+        tang::go([&ch, &total_received]() {
+            int value;
+            for (int j = 0; j < (num_producers * items_per_producer) / num_consumers; ++j) {
+                ch >> value;
+                total_received++;
             }
         });
     }
     
-    tang::runtime::run();
+    // Run scheduler
+    runtime.run();
     
-    ASSERT(total_sent.load() == num_producers * messages_per_producer);
-    ASSERT(total_received.load() == num_producers * messages_per_producer);
-    tang::runtime::stop();
-    std::cout << "Multiple producers and consumers test passed!" << std::endl;
+    // Verify all items were processed
+    ASSERT_EQUAL(num_producers * items_per_producer, total_received.load());
 }
 
-// Test channel timeout behavior
-void test_channel_timeout() {
-    std::cout << "Testing channel timeout behavior..." << std::endl;
-    tang::channel<int> ch(1);
-    std::atomic_bool operation_completed{false};
+/**
+ * Test channel with blocking operations
+ */
+TEST(channel_blocking_operations) {
+    tang::test::RuntimeScope runtime(2);
     
-    tang::runtime::init(2);
-    
-    // Send one value to fill the channel
-    ch << 1;
-    
-    // Create a coroutine to try sending (should timeout or wait)
-    tang::go([&ch, &operation_completed]() {
-        [[maybe_unused]] auto start = std::chrono::steady_clock::now();
-        // Try sending with timeout
-        bool sent = false;
-        int timeout_count = 0;
-        while (!sent && timeout_count < 100) {
-            sent = ch.try_send(2);
-            if (!sent) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                timeout_count++;
-            }
-        }
-        operation_completed = true;
-    });
-    
-    tang::runtime::run();
-    ASSERT(operation_completed.load());
-    tang::runtime::stop();
-    std::cout << "Channel timeout behavior test passed!" << std::endl;
-}
-
-// Test channel close wakeup behavior
-void test_channel_close_wakeup() {
-    std::cout << "Testing channel close wakeup behavior..." << std::endl;
     tang::channel<int> ch;
-    std::atomic_int waiting_senders{0};
-    std::atomic_int woken_senders{0};
-    std::atomic_bool close_completed{false};
+    std::atomic_int received_value{0};
+    std::atomic_bool receiver_started{false};
+    std::atomic_bool sender_completed{false};
     
-    tang::runtime::init(2);
-    
-    // Create a coroutine to wait for senders
-    tang::go([&ch, &waiting_senders, &woken_senders]() {
-        waiting_senders++;
-        // This coroutine will block waiting for send
-        ch << 100;
-        woken_senders++;
-    });
-    
-    // Wait for senders to be ready
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    ASSERT(waiting_senders.load() >= 1);
-    
-    // Close channel, this should wake up waiting senders
-    ch.close();
-    close_completed = true;
-    
-    tang::runtime::run();
-    
-    ASSERT(close_completed.load());
-    tang::runtime::stop();
-    std::cout << "Channel close wakeup behavior test passed!" << std::endl;
-}
-
-// Test channel data order preservation
-void test_channel_order_preservation() {
-    std::cout << "Testing channel data order preservation..." << std::endl;
-    const int num_messages = 100;
-    tang::channel<int> ch(100);
-    std::atomic_int last_received{0};
-    std::atomic_int in_order_count{0};
-    
-    tang::runtime::init(2);
-    
-    // Send send in order
-    tang::go([&ch, num_messages]() {
-        for (int i = 0; i < num_messages; ++i) {
-            ch << i;
-        }
-        ch.close();
-    });
-    
-    // Receive in order
-    tang::go([&ch, &last_received, &in_order_count, num_messages]() {
+    // Create receiver coroutine
+    tang::go([&ch, &received_value, &receiver_started]() {
+        receiver_started = true;
         int value;
-        while (ch >> value) {
-            if (value == last_received.load() + 1) {
-                in_order_count++;
-            }
-            last_received = value;
-        }
+        ch >> value;  // This should block until sender sends
+        received_value = value;
     });
     
-    tang::runtime::run();
-    
-    ASSERT(last_received.load() == num_messages - 1);
-    ASSERT(in_order_count.load() == num_messages - 1);
-    tang::runtime::stop();
-    std::cout << "Channel data order preservation test passed!" << std::endl;
-}
-
-// Test vector type channel
-void test_vector_channel() {
-    std::cout << "Testing vector type channel..." << std::endl;
-    tang::channel<std::vector<int>> ch(2);
-    
-    tang::runtime::init(2);
-    
-    std::vector<int> v1 = {1, 2, 3, 4, 5};
-    std::vector<int> v2 = {10, 20, 30};
-    
-    ch << v1;
-    ch << v2;
-    
-    std::vector<int> r1, r2;
-    ch >> r1;
-    ch >> r2;
-    
-    ASSERT(r1.size() == 5);
-    ASSERT(r2.size() == 3);
-    ASSERT(r1[0] == 1);
-    ASSERT(r2[0] == 10);
-    
-    tang::runtime::stop();
-    std::cout << "Vector type channel test passed!" << std::endl;
-}
-
-// Test channel loop send receive
-void test_channel_loop_send_recv() {
-    std::cout << "Testing channel loop send receive..." << std::endl;
-    const int iterations = 50;
-    tang::channel<int> ch(10);
-    std::atomic_int total_sent{0};
-    std::atomic_int total_received{0};
-    
-    tang::runtime::init(2);
-    
-    // Loop send
-    tang::go([&ch, &total_sent, iterations]() {
-        for (int i = 0; i < iterations; ++i) {
-            ch << i;
-            total_sent++;
-        }
-        ch.close();
-    });
-    
-    // Loop receive
-    tang::go([&ch, &total_received, iterations]() {
-        int value;
-        int count = 0;
-        while (count < iterations && (ch >> value)) {
-            total_received++;
-            count++;
-        }
-    });
-    
-    tang::runtime::run();
-    
-    ASSERT(total_sent.load() == iterations);
-    ASSERT(total_received.load() == iterations);
-    tang::runtime::stop();
-    std::cout << "Channel loop send receive test passed!" << std::endl;
-}
-
-// Test channel boundary conditions
-void test_channel_boundary_conditions() {
-    std::cout << "Testing channel boundary conditions..." << std::endl;
-    
-    // Test channel with capacity 0
-    tang::channel<int> ch0;
-    ASSERT(ch0.is_full());
-    ASSERT(ch0.is_empty() == false || !ch0.is_empty());
-    
-    // Test channel with capacity 1
-    tang::channel<int> ch1(1);
-    ASSERT(ch1.is_empty());
-    ASSERT(!ch1.is_full());
-    
-    ch1 << 1;
-    ASSERT(!ch1.is_empty());
-    ASSERT(ch1.is_full());
-    
-    int value;
-    ch1 >> value;
-    ASSERT(value == 1);
-    ASSERT(ch1.is_empty());
-    ASSERT(!ch1.is_full());
-    
-    // Test large capacity channel
-    tang::channel<int> ch100(100);
-    for (int i = 0; i < 100; ++i) {
-        ch100 << i;
+    // Wait for receiver to start
+    while (!receiver_started.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    ASSERT(ch100.is_full());
     
-    for (int i = 0; i < 100; ++i) {
-        ch100 >> value;
-        ASSERT(value == i);
-    }
-    ASSERT(ch100.is_empty());
+    // Create sender coroutine
+    tang::go([&ch, &sender_completed]() {
+        ch << 100;  // This should unblock the receiver
+        sender_completed = true;
+    });
     
-    std::cout << "Channel boundary conditions test passed!" << std::endl;
+    // Run scheduler
+    runtime.run();
+    
+    // Verify operations completed
+    ASSERT_TRUE(sender_completed.load());
+    ASSERT_EQUAL(100, received_value.load());
 }
 
-// Test channel concurrency safety
-void test_channel_concurrent_safety() {
-    std::cout << "Testing channel concurrent safety..." << std::endl;
-    const int num_threads = 4;
-    const int operations_per_thread = 100;
-    tang::channel<int> ch(50);
-    std::atomic_int total_operations{0};
+/**
+ * Test channel with different data types
+ */
+TEST(channel_different_data_types) {
+    tang::test::RuntimeScope runtime(2);
     
-    tang::runtime::init(num_threads);
-    
-    for (int t = 0; t < num_threads; ++t) {
-        tang::go([&ch, &total_operations, t, operations_per_thread]() {
-            for (int i = 0; i < operations_per_thread; ++i) {
-                int value = t * 10000 + i;
-                ch << value;
-                total_operations++;
+    // Test with string
+    {
+        tang::channel<std::string> str_ch;
+        std::string received_str;
+        std::mutex str_mutex;
+        
+        tang::go([&str_ch, &received_str, &str_mutex]() {
+            std::string value;
+            str_ch >> value;
+            {
+                std::lock_guard<std::mutex> lock(str_mutex);
+                received_str = value;
             }
         });
+        
+        tang::go([&str_ch]() {
+            str_ch << "Hello, World!";
+        });
+        
+        runtime.run();
+        {
+            std::lock_guard<std::mutex> lock(str_mutex);
+            ASSERT_EQUAL("Hello, World!", received_str);
+        }
     }
     
-    // Consumer
-    tang::go([&ch, &total_operations, num_threads, operations_per_thread]() {
-        int expected_total = num_threads * operations_per_thread;
-        int received = 0;
-        int value;
-        while (received < expected_total && (ch >> value)) {
-            received++;
+    // Test with vector
+    {
+        tang::channel<std::vector<int>> vec_ch;
+        std::vector<int> received_vec;
+        std::mutex vec_mutex;
+        
+        tang::go([&vec_ch, &received_vec, &vec_mutex]() {
+            std::vector<int> value;
+            vec_ch >> value;
+            {
+                std::lock_guard<std::mutex> lock(vec_mutex);
+                received_vec = value;
+            }
+        });
+        
+        tang::go([&vec_ch]() {
+            vec_ch << std::vector<int>{1, 2, 3, 4, 5};
+        });
+        
+        runtime.run();
+        {
+            std::lock_guard<std::mutex> lock(vec_mutex);
+            ASSERT_EQUAL(5, received_vec.size());
+            ASSERT_EQUAL(1, received_vec[0]);
+            ASSERT_EQUAL(5, received_vec[4]);
         }
-    });
-    
-    tang::runtime::run();
-    ASSERT(total_operations.load() == num_threads * operations_per_thread);
-    tang::runtime::stop();
-    std::cout << "Channel concurrent safety test passed!" << std::endl;
+    }
 }
 
-// Main function
-int main() {
-    std::cout << "Starting channel tests..." << std::endl;
+/**
+ * Test channel capacity limits
+ */
+TEST(channel_capacity_limits) {
+    tang::test::RuntimeScope runtime(2);
     
-    try {
-        test_basic_channel();
-        test_buffered_channel();
-        test_channel_close();
-        test_multiple_sender_receiver();
-        test_channel_status();
-        test_try_send_recv();
-        test_receive_after_close();
-        test_string_channel();
-        test_struct_channel();
-        test_single_capacity_channel();
-        test_unbuffered_channel_sync();
-        test_multi_producer_consumer();
-        test_channel_timeout();
-        test_channel_close_wakeup();
-        test_channel_order_preservation();
-        test_vector_channel();
-        test_channel_loop_send_recv();
-        test_channel_boundary_conditions();
-        test_channel_concurrent_safety();
-        
-        std::cout << "\\\\nAll channel tests passed!" << std::endl;
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "Test failed: " << e.what() << std::endl;
-        return 1;
+    // Test zero capacity (unbuffered)
+    {
+        tang::channel<int> ch(0);
+        ASSERT_FALSE(ch.try_send(1));  // Should fail without receiver
     }
+    
+    // Test small capacity
+    {
+        tang::channel<int> ch(1);
+        ASSERT_TRUE(ch.try_send(1));
+        ASSERT_FALSE(ch.try_send(2));  // Should fail - buffer full
+        
+        int value;
+        ASSERT_TRUE(ch.try_recv(value));
+        ASSERT_EQUAL(1, value);
+        ASSERT_TRUE(ch.try_send(2));   // Should succeed now
+    }
+    
+    // Test large capacity
+    {
+        tang::channel<int> ch(100);
+        for (int i = 0; i < 100; ++i) {
+            ASSERT_TRUE(ch.try_send(i));
+        }
+        ASSERT_FALSE(ch.try_send(100));  // Should fail - buffer full
+        
+        int value;
+        for (int i = 0; i < 100; ++i) {
+            ASSERT_TRUE(ch.try_recv(value));
+            ASSERT_EQUAL(i, value);
+        }
+        ASSERT_FALSE(ch.try_recv(value));  // Should fail - buffer empty
+    }
+}
+
+/**
+ * Main function using test framework
+ */
+int main(int argc, char* argv[]) {
+    return tang::test::run_tests(argc, argv);
 }

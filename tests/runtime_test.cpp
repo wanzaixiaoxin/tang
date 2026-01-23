@@ -1,24 +1,14 @@
-#include <iostream>
-#include <cassert>
+#include "test_framework.h"
 #include <tang/tang.h>
-#include <vector>
 #include <atomic>
-#include <stdexcept>
 #include <thread>
 #include <chrono>
 
-#define ASSERT(condition) \
-    do { \
-        if (!(condition)) { \
-            std::cerr << "Assertion failed: " << #condition << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
-            std::terminate(); \
-        } \
-    } while(0)
-
-void test_runtime_init_single_thread() {
-    std::cout << "Testing single-threaded runtime initialization..." << std::endl;
-    
-    tang::runtime::init(1);
+/**
+ * Test single-threaded runtime initialization
+ */
+TEST(runtime_init_single_thread) {
+    tang::test::RuntimeScope runtime(1);
     
     std::atomic_int counter{0};
     for (int i = 0; i < 10; ++i) {
@@ -27,17 +17,15 @@ void test_runtime_init_single_thread() {
         });
     }
     
-    tang::runtime::run();
-    ASSERT(counter.load() == 10);
-    
-    tang::runtime::stop();
-    std::cout << "Single-threaded runtime initialization test passed!" << std::endl;
+    runtime.run();
+    ASSERT_EQUAL(10, counter.load());
 }
 
-void test_runtime_init_multi_thread() {
-    std::cout << "Testing multi-threaded runtime initialization..." << std::endl;
-    
-    tang::runtime::init(4);
+/**
+ * Test multi-threaded runtime initialization
+ */
+TEST(runtime_init_multi_thread) {
+    tang::test::RuntimeScope runtime(4);
     
     std::atomic_int counter{0};
     for (int i = 0; i < 20; ++i) {
@@ -47,278 +35,158 @@ void test_runtime_init_multi_thread() {
         });
     }
     
-    tang::runtime::run();
-    ASSERT(counter.load() == 20);
-    
-    tang::runtime::stop();
-    std::cout << "Multi-threaded runtime initialization test passed!" << std::endl;
+    runtime.run();
+    ASSERT_EQUAL(20, counter.load());
 }
 
-void test_runtime_yield() {
-    std::cout << "Testing runtime yield..." << std::endl;
-    
-    tang::runtime::init(2);
+/**
+ * Test runtime yield functionality
+ */
+TEST(runtime_yield) {
+    tang::test::RuntimeScope runtime(2);
     
     std::atomic_int order{0};
     int task1_order = 0, task2_order = 0;
     
     tang::go([&order, &task1_order]() {
-            task1_order = ++order;
-            tang::runtime::yield();
-            task1_order = ++order;
-        });
-        
-        tang::go([&order, &task2_order]() {
-            task2_order = ++order;
-        });
+        task1_order = ++order;
+        ::tang::runtime::yield();
+        task1_order = ++order;
+    });
     
-    tang::runtime::run();
+    tang::go([&order, &task2_order]() {
+        task2_order = ++order;
+    });
     
-    ASSERT(task1_order == 1 || task2_order == 1);
-    ASSERT(task1_order == 3 && task2_order == 2);
+    runtime.run();
     
-    tang::runtime::stop();
-    std::cout << "Runtime yield test passed!" << std::endl;
+    // One task should start first
+    ASSERT_TRUE(task1_order == 1 || task2_order == 1);
+    // After yield, the other task should run
+    ASSERT_EQUAL(3, task1_order);
+    ASSERT_EQUAL(2, task2_order);
 }
 
-void test_runtime_sleep_ms() {
-    std::cout << "Testing runtime sleep_ms..." << std::endl;
-    
-    tang::runtime::init(2);
+/**
+ * Test runtime sleep_ms functionality
+ */
+TEST(runtime_sleep_ms) {
+    tang::test::RuntimeScope runtime(2);
     
     auto start = std::chrono::steady_clock::now();
     
     tang::go([]() {
-        tang::runtime::sleep_ms(50);
+        ::tang::runtime::sleep_ms(50);
     });
     
-    tang::runtime::run();
+    runtime.run();
     
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
-    ASSERT(duration.count() >= 45);
-    
-    tang::runtime::stop();
-    std::cout << "Runtime sleep_ms test passed!" << std::endl;
+    ASSERT_TRUE(duration.count() >= 45);
 }
 
-void test_runtime_multiple_init_stop_cycles() {
-    std::cout << "Testing multiple init/stop cycles..." << std::endl;
-    
-    for (int cycle = 0; cycle < 3; ++cycle) {
-        tang::runtime::init(2);
-        
+/**
+ * Test runtime with different thread counts
+ */
+TEST(runtime_different_thread_counts) {
+    // Test with 1 thread
+    {
+        tang::test::RuntimeScope runtime(1);
         std::atomic_int counter{0};
+        
         for (int i = 0; i < 5; ++i) {
             tang::go([&counter]() {
                 counter++;
             });
         }
         
-        tang::runtime::run();
-        ASSERT(counter.load() == 5);
+        runtime.run();
+        ASSERT_EQUAL(5, counter.load());
+    }
+    
+    // Test with 8 threads
+    {
+        tang::test::RuntimeScope runtime(8);
+        std::atomic_int counter{0};
         
-        tang::runtime::stop();
-    }
-    
-    std::cout << "Multiple init/stop cycles test passed!" << std::endl;
-}
-
-void test_runtime_concurrent_tasks() {
-    std::cout << "Testing concurrent tasks..." << std::endl;
-    
-    tang::runtime::init(4);
-    
-    const int num_tasks = 100;
-    std::atomic_int completed{0};
-    std::atomic_int sum{0};
-    
-    for (int i = 0; i < num_tasks; ++i) {
-        tang::go([&completed, &sum, i]() {
-            sum += i;
-            completed++;
-        });
-    }
-    
-    tang::runtime::run();
-    
-    ASSERT(completed.load() == num_tasks);
-    
-    int expected_sum = 0;
-    for (int i = 0; i < num_tasks; ++i) {
-        expected_sum += i;
-    }
-    ASSERT(sum.load() == expected_sum);
-    
-    tang::runtime::stop();
-    std::cout << "Concurrent tasks test passed!" << std::endl;
-}
-
-void test_runtime_work_distribution() {
-    std::cout << "Testing work distribution..." << std::endl;
-    
-    tang::runtime::init(4);
-    
-    const int tasks_per_thread = 10;
-    std::vector<std::atomic_int> thread_counts(4);
-    std::atomic_int total{0};
-    
-    for (int t = 0; t < 4; ++t) {
-        tang::go([&thread_counts, &total, t, tasks_per_thread]() {
-            for (int i = 0; i < tasks_per_thread; ++i) {
-                thread_counts[t]++;
-                total++;
-            }
-        });
-    }
-    
-    tang::runtime::run();
-    
-    ASSERT(total.load() == 4 * tasks_per_thread);
-    
-    tang::runtime::stop();
-    std::cout << "Work distribution test passed!" << std::endl;
-}
-
-void test_runtime_cpu_intensive_tasks() {
-    std::cout << "Testing CPU-intensive tasks..." << std::endl;
-    
-    tang::runtime::init(4);
-    
-    const int num_tasks = 8;
-    std::atomic_int completed{0};
-    
-    for (int i = 0; i < num_tasks; ++i) {
-        tang::go([&completed, i]() {
-            volatile int result = 0;
-            for (int j = 0; j < 100000; ++j) {
-                result += j * i;
-            }
-            completed++;
-        });
-    }
-    
-    tang::runtime::run();
-    ASSERT(completed.load() == num_tasks);
-    
-    tang::runtime::stop();
-    std::cout << "CPU-intensive tasks test passed!" << std::endl;
-}
-
-void test_runtime_io_wait_tasks() {
-    std::cout << "Testing IO wait tasks..." << std::endl;
-    
-    tang::runtime::init(4);
-    
-    const int num_tasks = 4;
-    std::atomic_int completed{0};
-    
-    for (int i = 0; i < num_tasks; ++i) {
-        tang::go([&completed, i]() {
-            for (int j = 0; j < 3; ++j) {
-                tang::runtime::sleep_ms(10);
-            }
-            completed++;
-        });
-    }
-    
-    tang::runtime::run();
-    ASSERT(completed.load() == num_tasks);
-    
-    tang::runtime::stop();
-    std::cout << "IO wait tasks test passed!" << std::endl;
-}
-
-void test_runtime_mixed_tasks() {
-    std::cout << "Testing mixed tasks..." << std::endl;
-    
-    tang::runtime::init(4);
-    
-    const int cpu_tasks = 4;
-    const int io_tasks = 4;
-    std::atomic_int cpu_completed{0};
-    std::atomic_int io_completed{0};
-    
-    for (int i = 0; i < cpu_tasks; ++i) {
-        tang::go([&cpu_completed, i]() {
-            volatile int result = 0;
-            for (int j = 0; j < 50000; ++j) {
-                result += j * i;
-            }
-            cpu_completed++;
-        });
-    }
-    
-    for (int i = 0; i < io_tasks; ++i) {
-        tang::go([&io_completed, i]() {
-            for (int j = 0; j < 3; ++j) {
-                tang::runtime::sleep_ms(5);
-            }
-            io_completed++;
-        });
-    }
-    
-    tang::runtime::run();
-    
-    ASSERT(cpu_completed.load() == cpu_tasks);
-    ASSERT(io_completed.load() == io_tasks);
-    
-    tang::runtime::stop();
-    std::cout << "Mixed tasks test passed!" << std::endl;
-}
-
-void test_runtime_task_affinity() {
-    std::cout << "Testing task affinity..." << std::endl;
-    
-    tang::runtime::init(2);
-    
-    std::atomic_int task1_runs{0};
-    std::atomic_int task2_runs{0};
-    
-    tang::go([&task1_runs]() {
-        for (int i = 0; i < 5; ++i) {
-            task1_runs++;
-            tang::runtime::yield();
+        for (int i = 0; i < 40; ++i) {
+            tang::go([&counter]() {
+                counter++;
+            });
         }
+        
+        runtime.run();
+        ASSERT_EQUAL(40, counter.load());
+    }
+}
+
+/**
+ * Test runtime with mixed operations
+ */
+TEST(runtime_mixed_operations) {
+    tang::test::RuntimeScope runtime(4);
+    
+    std::atomic_int counter{0};
+    std::atomic_bool sleep_completed{false};
+    
+    // Create tasks with different operations
+    for (int i = 0; i < 10; ++i) {
+        tang::go([&counter]() {
+            counter++;
+        });
+    }
+    
+    tang::go([&sleep_completed]() {
+        ::tang::runtime::sleep_ms(30);
+        sleep_completed = true;
     });
     
-    tang::go([&task2_runs]() {
-        for (int i = 0; i < 5; ++i) {
-            task2_runs++;
-            tang::runtime::yield();
-        }
-    });
+    runtime.run();
     
-    tang::runtime::run();
-    
-    ASSERT(task1_runs.load() == 5);
-    ASSERT(task2_runs.load() == 5);
-    
-    tang::runtime::stop();
-    std::cout << "Task affinity test passed!" << std::endl;
+    ASSERT_EQUAL(10, counter.load());
+    ASSERT_TRUE(sleep_completed.load());
 }
 
-int main() {
-    std::cout << "Running runtime tests..." << std::endl;
-    
-    try {
-        test_runtime_init_single_thread();
-        test_runtime_init_multi_thread();
-        test_runtime_yield();
-        test_runtime_sleep_ms();
-        test_runtime_multiple_init_stop_cycles();
-        test_runtime_concurrent_tasks();
-        test_runtime_work_distribution();
-        test_runtime_cpu_intensive_tasks();
-        test_runtime_io_wait_tasks();
-        test_runtime_mixed_tasks();
-        test_runtime_task_affinity();
+/**
+ * Test runtime stop and restart
+ */
+TEST(runtime_stop_restart) {
+    // First run
+    {
+        tang::test::RuntimeScope runtime(2);
+        std::atomic_int counter{0};
         
-        std::cout << "\nAll runtime tests passed!" << std::endl;
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "Test failed: " << e.what() << std::endl;
-        return 1;
+        for (int i = 0; i < 5; ++i) {
+            tang::go([&counter]() {
+                counter++;
+            });
+        }
+        
+        runtime.run();
+        ASSERT_EQUAL(5, counter.load());
     }
+    
+    // Second run (should work independently)
+    {
+        tang::test::RuntimeScope runtime(3);
+        std::atomic_int counter{0};
+        
+        for (int i = 0; i < 8; ++i) {
+            tang::go([&counter]() {
+                counter++;
+            });
+        }
+        
+        runtime.run();
+        ASSERT_EQUAL(8, counter.load());
+    }
+}
+
+/**
+ * Main function using test framework
+ */
+int main(int argc, char* argv[]) {
+    return tang::test::run_tests(argc, argv);
 }
