@@ -1,64 +1,40 @@
-#include <iostream>
-#include <cassert>
+#include "test_framework.h"
 #include <tang/tang.h>
-#include <tang/logger.h>
-#include <vector>
 #include <atomic>
-#include <stdexcept>
 #include <thread>
-#include <string>
-#include <sstream>
 
-// Simple assertion macro
-#define ASSERT(condition) \
-    do { \
-        if (!(condition)) { \
-            LOG_ERROR(tang::logger::test, std::string("Assertion failed: ") + #condition + " at " + __FILE__ + ":" + std::to_string(__LINE__)); \
-            std::terminate(); \
-        } \
-    } while(0)
-
-// Test basic channel operation
-void test_basic_channel() {
-    LOG_INFO(tang::logger::test, "Testing basic channel operation...");
+/**
+ * Test basic coroutine functionality
+ */
+TEST(basic_coroutine) {
+    tang::test::RuntimeScope runtime(1);
     
-    // Simple test without channels first
     std::atomic_bool executed = false;
-    
-    // Initialize runtime
-    tang::runtime::init(1);
     
     // Create a simple coroutine
     tang::go([&executed]() {
-        LOG_DEBUG(tang::logger::test, "Simple coroutine started");
         executed = true;
-        LOG_DEBUG(tang::logger::test, "Simple coroutine completed");
     });
     
     // Run scheduler
-    tang::runtime::run();
+    runtime.run();
     
     // Verify coroutine execution
-    ASSERT(executed.load());
+    ASSERT_TRUE(executed.load());
+}
+
+/**
+ * Test basic channel operation
+ */
+TEST(basic_channel_operation) {
+    tang::test::RuntimeScope runtime(1);
     
-    LOG_INFO(tang::logger::test, "Basic coroutine test passed!");
-    
-    // Now test with channels
     tang::channel<int> ch;
     int received = 0;
     
-    // Re-initialize runtime
-    tang::runtime::init(1);
-    
     // Create receiver coroutine
     tang::go([&ch, &received]() -> tang::task<void> {
-        LOG_DEBUG(tang::logger::test, "Receiver coroutine started");
         ch >> received;
-        
-        std::stringstream msg;
-        msg << "Receiver coroutine received: " << received;
-        LOG_DEBUG(tang::logger::test, msg.str());
-        
         co_return;
     });
     
@@ -66,24 +42,101 @@ void test_basic_channel() {
     ch << 42;
     
     // Run scheduler
-    tang::runtime::run();
+    runtime.run();
     
     // Verify result
-    ASSERT(received == 42);
-    
-    LOG_INFO(tang::logger::test, "Basic channel operation test passed!");
+    ASSERT_EQUAL(42, received);
 }
 
-// Main function
-int main() {
-    LOG_INFO(tang::logger::test, "Starting simple tests...");
+/**
+ * Test channel with multiple operations
+ */
+TEST(channel_multiple_operations) {
+    tang::test::RuntimeScope runtime(2);
     
-    try {
-        test_basic_channel();
-        LOG_INFO(tang::logger::test, "\nAll simple tests passed!");
-        return 0;
-    } catch (const std::exception& e) {
-        LOG_ERROR(tang::logger::test, std::string("Test failed: ") + e.what());
-        return 1;
+    tang::channel<int> ch(5); // Buffered channel with capacity 5
+    std::atomic_int received_count{0};
+    
+    // Create receiver coroutine
+    tang::go([&ch, &received_count]() -> tang::task<void> {
+        int value;
+        for (int i = 0; i < 5; ++i) {
+            ch >> value;
+            received_count++;
+        }
+        co_return;
+    });
+    
+    // Send multiple values
+    for (int i = 0; i < 5; ++i) {
+        ch << i;
     }
+    
+    // Run scheduler
+    runtime.run();
+    
+    // Verify result
+    ASSERT_EQUAL(5, received_count.load());
+}
+
+/**
+ * Test channel closure
+ */
+TEST(channel_closure) {
+    tang::test::RuntimeScope runtime(1);
+    
+    tang::channel<int> ch;
+    std::atomic_bool receiver_finished{false};
+    
+    // Create receiver coroutine that should handle channel closure
+    tang::go([&ch, &receiver_finished]() -> tang::task<void> {
+        int value;
+        bool result = ch >> value;
+        ASSERT_FALSE(result); // Should return false when channel is closed
+        receiver_finished = true;
+        co_return;
+    });
+    
+    // Close channel immediately
+    ch.close();
+    
+    // Run scheduler
+    runtime.run();
+    
+    // Verify receiver finished
+    ASSERT_TRUE(receiver_finished.load());
+}
+
+/**
+ * Test coroutine with sleep
+ */
+TEST(coroutine_with_sleep) {
+    tang::test::RuntimeScope runtime(1);
+    
+    std::atomic_bool executed{false};
+    auto start_time = std::chrono::steady_clock::now();
+    
+    // Create coroutine with sleep
+    tang::go([&executed]() {
+        // Sleep 100 milliseconds
+        ::tang::runtime::sleep_ms(100);
+        executed = true;
+    });
+    
+    // Run scheduler
+    runtime.run();
+    
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    
+    // Verify execution
+    ASSERT_TRUE(executed.load());
+    ASSERT_TRUE(duration.count() >= 100); // Should take at least 100ms
+}
+
+/**
+ * Main function using test framework
+ */
+int main(int argc, char* argv[]) {
+    return tang::test::run_tests(argc, argv);
 }
