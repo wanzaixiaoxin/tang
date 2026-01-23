@@ -7,8 +7,9 @@
 #include <queue>
 #include <sstream>
 
-// Debug logging macros
+// Debug logging macros - DISABLE CHANNEL DEBUG TO AVOID SPAM
 #define RUNTIME_DEBUG 1
+#define CHANNEL_DEBUG 0  // Disable channel debug to avoid busy-wait spam
 
 #if RUNTIME_DEBUG
 #define DEBUG_LOG(msg) do { \
@@ -22,6 +23,16 @@
 #define DEBUG_LOG(msg)
 #define DEBUG_LOG_FUNC()
 #define DEBUG_LOG_HANDLE(handle)
+#endif
+
+#if CHANNEL_DEBUG
+#define CHANNEL_DEBUG_LOG(msg) do { \
+    std::stringstream ss; \
+    ss << msg; \
+    LOG_DEBUG(tang::logger::channel, ss.str()); \
+} while(0)
+#else
+#define CHANNEL_DEBUG_LOG(msg)
 #endif
 
 namespace tang {
@@ -130,10 +141,10 @@ void scheduler::run() {
     // This avoids complex thread synchronization issues
     DEBUG_LOG("Processing tasks in current thread...");
     
-    size_t max_iterations = 100; // Prevent infinite loops
-    size_t iteration = 0;
+    size_t empty_count = 0;
+    const size_t max_empty_count = 10; // Exit after 10 consecutive empty checks
     
-    while (iteration < max_iterations) {
+    while (empty_count < max_empty_count) {
         std::coroutine_handle<> handle;
         
         {
@@ -142,6 +153,7 @@ void scheduler::run() {
                 handle = task_queue_.front();
                 task_queue_.pop_front();
                 DEBUG_LOG("Main thread got task from queue, queue size: " << task_queue_.size());
+                empty_count = 0; // Reset empty count when we find work
             }
         }
         
@@ -151,7 +163,7 @@ void scheduler::run() {
             // Check if coroutine is already done before resuming
             if (handle.done()) {
                 DEBUG_LOG("Main thread coroutine already done, skipping resume");
-                iteration++;
+                // No iteration counter needed
                 continue;
             }
             
@@ -162,11 +174,11 @@ void scheduler::run() {
                 DEBUG_LOG("Main thread resume() returned");
             } catch (const std::exception& e) {
                 DEBUG_LOG("Main thread coroutine resume failed: " << e.what());
-                iteration++;
+                // No iteration counter needed
                 continue;
             } catch (...) {
                 DEBUG_LOG("Main thread coroutine resume failed with unknown exception");
-                iteration++;
+                // No iteration counter needed
                 continue;
             }
 
@@ -177,22 +189,18 @@ void scheduler::run() {
                 schedule(handle);
             } else {
                 DEBUG_LOG("Main thread coroutine completed, final_suspend returned noop_coroutine");
-                // 协程已完成，不再重新调度
-                // 协程帧会在 task 析构时销毁
+
             }
         } else {
-            break;
+            // Queue empty, sleep to avoid busy waiting
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
-        iteration++;
+        // No iteration counter needed
     }
     
-    DEBUG_LOG("Task processing completed after " << iteration << " iterations");
-    
-    DEBUG_LOG("Stopping scheduler...");
-    stop();
-    
-    DEBUG_LOG("Scheduler run completed");
+    DEBUG_LOG("Task processing completed after " << empty_count << " consecutive empty checks");
+    DEBUG_LOG("Scheduler run completed (scheduler still running, will be stopped by runtime::stop())");
 }
 
 void scheduler::stop() {
@@ -239,7 +247,8 @@ void scheduler::schedule(std::coroutine_handle<> handle) {
     
     std::lock_guard<std::mutex> lock(queue_mutex_);
     task_queue_.push_back(handle);
-    DEBUG_LOG("Task scheduled, queue size: " << task_queue_.size());
+    active_tasks_++;
+    DEBUG_LOG("Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load());
 }
 
 void scheduler::wait_for_completion() {
@@ -265,18 +274,21 @@ void init(size_t num_threads) {
     DEBUG_LOG_FUNC();
     DEBUG_LOG("Initializing runtime with " << num_threads << " threads");
     
-    if (!g_scheduler) {
-        DEBUG_LOG("Creating new scheduler instance");
-        g_scheduler = new scheduler(num_threads);
-        // Do NOT call init() here - it will be called by run()
-        DEBUG_LOG("Scheduler instance created");
-    } else {
-        DEBUG_LOG("Scheduler already exists, skipping creation");
+    // Always create a new scheduler instance to ensure clean state
+    if (g_scheduler) {
+        DEBUG_LOG("Deleting existing scheduler instance");
+        delete g_scheduler;
+        g_scheduler = nullptr;
     }
+    
+    DEBUG_LOG("Creating new scheduler instance");
+    g_scheduler = new scheduler(num_threads);
+    // Do NOT call init() here - it will be called by run()
+    DEBUG_LOG("Scheduler instance created");
 }
 
 void run() {
-    DEBUG_LOG_FUNC();
+    LOG_DEBUG_FUNC(tang::logger::runtime);
     
     if (!g_scheduler) {
         DEBUG_LOG("No scheduler found, initializing with default threads");

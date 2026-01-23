@@ -14,7 +14,7 @@ int run_tests(int argc, char* argv[]) {
     (void)argc; 
     (void)argv; 
     try {
-        LOG_INFO(tang::logger::test, "Starting test ");
+        LOG_INFO(tang::logger::test, "Starting test");
         
         bool success = get_test_framework().run_all();
         

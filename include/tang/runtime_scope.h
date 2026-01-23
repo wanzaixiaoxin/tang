@@ -79,34 +79,12 @@ public:
         
         has_run_ = true;
         
-        // Use a timeout to prevent infinite blocking
-        auto start_time = std::chrono::steady_clock::now();
+        LOG_INFO(tang::logger::runtime, "Starting scheduler run");
         
-        LOG_INFO(tang::logger::test, "Starting scheduler run");
+        // Run scheduler once - coroutines will properly suspend/resume via awaiters
+        runtime::run();
         
-        // Run scheduler with timeout protection
-        while (std::chrono::steady_clock::now() - start_time < std::chrono::seconds(5)) {
-            runtime::run();
-            
-            // Check if scheduler is still running
-            if (!runtime::g_scheduler) {
-                LOG_INFO(tang::logger::test, "Scheduler has been stopped");
-                runtime_running_ = false;
-                break;
-            }
-            
-            // Small delay to prevent busy waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        
-        // Force stop if timeout reached
-        if (std::chrono::steady_clock::now() - start_time >= std::chrono::seconds(5)) {
-            LOG_WARN(tang::logger::test, "RuntimeScope::run() timeout reached, forcing stop");
-            runtime::stop();
-            runtime_running_ = false;
-        }
-        
-        LOG_INFO(tang::logger::test, "Scheduler run completed");
+        LOG_INFO(tang::logger::runtime, "Scheduler run completed");
     }
     
     /**

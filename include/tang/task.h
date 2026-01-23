@@ -53,7 +53,7 @@ public:
             return {};
         }
         
-        std::suspend_never final_suspend() noexcept {
+        std::suspend_always final_suspend() noexcept {
             LOG_DEBUG(tang::logger::task, "final_suspend called");
             return {};
         }
@@ -126,6 +126,9 @@ public:
             // If coroutine is already completed (may happen with suspend_never), no need to schedule
             if (handle.done()) {
                 TASK_DEBUG_LOG("Task already done, skipping schedule");
+                // Destroy the handle since coroutine is complete
+                handle.destroy();
+                handle = nullptr;
                 return;
             }
             TASK_DEBUG_LOG("Scheduling task");
@@ -156,7 +159,7 @@ public:
             return {};
         }
 
-        std::suspend_never final_suspend() noexcept {
+        std::suspend_always final_suspend() noexcept {
             return {};
         }
 
@@ -220,6 +223,8 @@ public:
         if (handle) {
             // If coroutine is already completed (may happen with suspend_never), no need to schedule
             if (handle.done()) {
+                handle.destroy();
+                handle = nullptr;
                 return;
             }
             runtime::schedule(handle);

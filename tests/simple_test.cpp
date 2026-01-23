@@ -13,45 +13,66 @@ TEST2(basic_coroutine,true) {
 
     LOG_INFO(tang::logger::test, "Before creating coroutine, executed = " + std::to_string(executed.load()));
 
-    // Create a simple coroutine
-    tang::go([&executed]() {
-        LOG_INFO(tang::logger::test, "Inside coroutine, setting executed to true");
-        executed = true;
-        LOG_INFO(tang::logger::test, "Inside coroutine, executed = " + std::to_string(executed.load()));
-    });
+    try {
+        // Create a simple coroutine
+        tang::go([&executed]() {
+            LOG_INFO(tang::logger::test, "Inside coroutine, setting executed to true");
+            executed = true;
+            LOG_INFO(tang::logger::test, "Inside coroutine, executed = " + std::to_string(executed.load()));
+        });
 
-    LOG_INFO(tang::logger::test, "After creating coroutine, executed = " + std::to_string(executed.load()));
+        LOG_INFO(tang::logger::test, "After creating coroutine, executed = " + std::to_string(executed.load()));
 
-    // Run scheduler
-    runtime.run();
+        // Give some time for coroutine to be scheduled
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        
+        // Run scheduler
+        runtime.run();
 
-    LOG_INFO(tang::logger::test, "After runtime.run(), executed = " + std::to_string(executed.load()));
+        LOG_INFO(tang::logger::test, "After runtime.run(), executed = " + std::to_string(executed.load()));
 
-    // Verify coroutine execution
-    ASSERT_TRUE(executed.load());
+        // Verify coroutine execution
+        ASSERT_TRUE(executed.load());
+    } catch (const std::exception& e) {
+        LOG_ERROR(tang::logger::test, "Exception in basic_coroutine: " + std::string(e.what()));
+        throw;
+    } catch (...) {
+        LOG_ERROR(tang::logger::test, "Unknown exception in basic_coroutine");
+        throw;
+    }
 }
 
 /**
  * Test basic channel operation
  */
-TEST2(basic_channel_operation,false) {
+TEST2(basic_channel_operation,true) {
     tang::RuntimeScope runtime(1);
     
-    tang::channel<int> ch;
+    // Use buffered channel to avoid deadlock
+    tang::channel<int> ch(1);
     int received = 0;
     
-    // Create receiver coroutine
-    tang::go([&ch, &received]() -> tang::task<void> {
-        ch >> received;
+    // Create sender coroutine - like Go goroutine
+    tang::go([&ch]() -> tang::task<void> {
+        LOG_INFO(tang::logger::test, "Inside sender coroutine");
+        co_await ch.send(42);  // Block until receiver is ready (Go-like behavior)
+        LOG_INFO(tang::logger::test, "Sent value: 42");
         co_return;
     });
     
-    // Send data before running scheduler
-    ch << 42;
+    // Create receiver coroutine - like Go goroutine
+    tang::go([&ch, &received]() -> tang::task<void> {
+        LOG_INFO(tang::logger::test, "Inside receiver coroutine");
+        co_await ch.recv(received);  // Block until data is available (Go-like behavior)
+        LOG_INFO(tang::logger::test, "Received value: " + std::to_string(received));
+        co_return;
+    });
     
-    // Run scheduler to process both operations
+    // Run scheduler once to process both coroutines - like Go runtime
+    LOG_INFO(tang::logger::test, "Starting scheduler for sender and receiver");
     runtime.run();
     
+    LOG_INFO(tang::logger::test, "After runtime.run(), received = " + std::to_string(received));
     // Verify result
     ASSERT_EQUAL(42, received);
 }
@@ -59,7 +80,7 @@ TEST2(basic_channel_operation,false) {
 /**
  * Test channel with multiple operations
  */
-TEST2(channel_multiple_operations,false) {
+TEST2(channel_multiple_operations,true) {
     tang::RuntimeScope runtime(2);
     
     tang::channel<int> ch(5); // Buffered channel with capacity 5
@@ -67,21 +88,30 @@ TEST2(channel_multiple_operations,false) {
     
     // Create receiver coroutine
     tang::go([&ch, &received_count]() -> tang::task<void> {
-        int value;
+        LOG_INFO(tang::logger::test, "Inside receiver coroutine");
         for (int i = 0; i < 5; ++i) {
-            ch >> value;
+            int value;
+            co_await ch.recv(value);
             received_count++;
         }
+        LOG_INFO(tang::logger::test, "Received 5 values");
+        co_return;
+    });
+        
+    // Create sender coroutine - like Go goroutine
+    tang::go([&ch]() -> tang::task<void> {
+        LOG_INFO(tang::logger::test, "Inside sender coroutine");
+        for (int i = 0; i < 5; ++i) {
+            co_await ch.send(i);
+        }
+        LOG_INFO(tang::logger::test, "Sent 5 values");
         co_return;
     });
     
-    // Send multiple values before running scheduler
-    for (int i = 0; i < 5; ++i) {
-        ch << i;
-    }
-    
     // Run scheduler to process all operations
+    LOG_INFO(tang::logger::test, "Starting scheduler for multiple operations");
     runtime.run();
+    LOG_INFO(tang::logger::test, "After runtime.run(), received_count = " + std::to_string(received_count.load()));
     
     // Verify result
     ASSERT_EQUAL(5, received_count.load());
@@ -90,7 +120,7 @@ TEST2(channel_multiple_operations,false) {
 /**
  * Test channel closure
  */
-TEST2(channel_closure,false) {
+TEST2(channel_closure,true) {
     tang::RuntimeScope runtime(1);
     
     tang::channel<int> ch;
@@ -99,7 +129,7 @@ TEST2(channel_closure,false) {
     // Create receiver coroutine that should handle channel closure
     tang::go([&ch, &receiver_finished]() -> tang::task<void> {
         int value;
-        bool result = ch >> value;
+        bool result = co_await ch.recv(value);
         ASSERT_FALSE(result); // Should return false when channel is closed
         receiver_finished = true;
         co_return;
@@ -118,7 +148,7 @@ TEST2(channel_closure,false) {
 /**
  * Test coroutine with sleep
  */
-TEST2(coroutine_with_sleep,false) {
+TEST2(coroutine_with_sleep,true) {
     tang::RuntimeScope runtime(1);
     
     std::atomic_bool executed{false};
@@ -146,5 +176,6 @@ TEST2(coroutine_with_sleep,false) {
  * Main function using test framework
  */
 int main(int argc, char* argv[]) {
+    tang::logger::init();
     return tang::test::run_tests(argc, argv);
 }

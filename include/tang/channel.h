@@ -11,6 +11,7 @@
 #include <thread>
 #include <chrono>
 #include <sstream>
+#include <functional>
 #include "tang/logger.h"
 
 namespace tang {
@@ -25,6 +26,10 @@ class coro_waiter {
 public:
     virtual ~coro_waiter() = default;
     virtual void resume() = 0;
+    virtual void resume_with_result(bool success) {
+        // Default implementation ignores result
+        resume();
+    }
 };
 
 // Channel base class
@@ -60,10 +65,20 @@ private:
 template <typename T>
 class recv_waiter : public coro_waiter {
 public:
-    recv_waiter(std::coroutine_handle<> handle, T* value_ptr)
-        : handle_(handle), value_ptr_(value_ptr) {}
+    recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::function<void(bool)> result_callback)
+        : handle_(handle), value_ptr_(value_ptr), result_callback_(std::move(result_callback)) {}
 
     void resume() override {
+        if (result_callback_) {
+            result_callback_(true); // Assume success for normal resume
+        }
+        ::tang::runtime::schedule(handle_);
+    }
+
+    void resume_with_result(bool success) {
+        if (result_callback_) {
+            result_callback_(success);
+        }
         ::tang::runtime::schedule(handle_);
     }
 
@@ -74,6 +89,7 @@ public:
 private:
     std::coroutine_handle<> handle_;
     T* value_ptr_;
+    std::function<void(bool)> result_callback_;
 };
 
 // Channel class forward declaration
@@ -114,7 +130,9 @@ public:
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        ch_.register_recv_waiter(handle, &value_);
+        ch_.register_recv_waiter(handle, &value_, [this](bool success) {
+            this->set_result(success);
+        });
     }
 
     bool await_resume() {
@@ -280,6 +298,16 @@ public:
         return false;
     }
 
+    // Send operation returning awaiter
+    auto send(T value) -> channel_send_awaiter<T> {
+        return channel_send_awaiter<T>(*this, std::move(value));
+    }
+
+    // Receive operation returning awaiter
+    auto recv(T& value) -> channel_recv_awaiter<T> {
+        return channel_recv_awaiter<T>(*this, value);
+    }
+
     // Receive operator - blocking receive
     bool operator>>(T& value) {
         LOG_DEBUG(tang::logger::channel, "Attempting to receive value");
@@ -299,9 +327,9 @@ public:
     }
 
     // Register receive waiter
-    void register_recv_waiter(std::coroutine_handle<> handle, T* value_ptr) {
+    void register_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::function<void(bool)> result_callback) {
         std::lock_guard<std::mutex> lock(mutex_);
-        recv_waiters_.emplace_back(std::make_unique<recv_waiter<T>>(handle, value_ptr));
+        recv_waiters_.emplace_back(std::make_unique<recv_waiter<T>>(handle, value_ptr, std::move(result_callback)));
     }
     
     // Close channel
@@ -320,7 +348,7 @@ public:
         send_waiters_.clear();
 
         for (auto& waiter : recv_waiters_) {
-            waiter->resume();
+            waiter->resume_with_result(false); // Channel closed, receive fails
         }
         recv_waiters_.clear();
     }
