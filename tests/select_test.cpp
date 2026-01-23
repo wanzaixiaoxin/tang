@@ -7,7 +7,7 @@
 #include <thread>
 #include <functional>
 
-// 简单的断言宏
+// Simple assertion macro
 #define ASSERT(condition) \
     do { \
         if (!(condition)) { \
@@ -16,24 +16,24 @@
         } \
     } while(0)
 
-// 测试基本的select操作
+// Test basic select operation
 tang::task<void> test_basic_select() {
-    std::cout << "测试基本select操作..." << std::endl;
-    // 创建两个channel
+    std::cout << "Testing basic select operation..." << std::endl;
+    // Create two channels
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     
     std::atomic_int received = 0;
     std::atomic_int selected_channel = 0;
     
-    // 创建发送协程，向channel2发送数据
+    // Create sender coroutine to send data to channel2
     tang::go([&ch2]() -> tang::task<void> {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         ch2 << 42;
         co_return;
     });
     
-    // 使用select等待两个channel
+    // Use select to wait on both channels
     int value;
     
     tang::select(
@@ -47,18 +47,18 @@ tang::task<void> test_basic_select() {
         })
     );
     
-    // 验证结果
+    // Verify result
     ASSERT(received.load() == 42);
     ASSERT(selected_channel.load() == 2);
     
-    std::cout << "基本select操作测试通过!" << std::endl;
+    std::cout << "Basic select operation test passed!" << std::endl;
     co_return;
 }
 
-// 测试带有默认case的select
+// Test select with default case
 tang::task<void> test_select_with_default() {
-    std::cout << "测试带有默认case的select..." << std::endl;
-    // 创建一个channel
+    std::cout << "Testing select with default case..." << std::endl;
+    // Create a channel
     tang::channel<int> ch;
     
     std::atomic_bool default_executed = false;
@@ -67,24 +67,24 @@ tang::task<void> test_select_with_default() {
     
     tang::select(
         tang::case_recv(ch, value, [&]() {
-            // 这个case不会被执行，因为没有发送数据
+            // This case won't be executed because no data is sent
         }),
         tang::default_case([&]() {
             default_executed = true;
         })
     );
     
-    // 验证默认case被执行
+    // Verify default case was executed
     ASSERT(default_executed.load());
     
-    std::cout << "带有默认case的select测试通过!" << std::endl;
+    std::cout << "Select with default case test passed!" << std::endl;
     co_return;
 }
 
-// 测试多个channel的select
+// Test select with multiple channels
 tang::task<void> test_multiple_channels_select() {
-    std::cout << "测试多个channel的select..." << std::endl;
-    // 创建三个channel
+    std::cout << "Testing select with multiple channels..." << std::endl;
+    // Create three channels
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     tang::channel<int> ch3;
@@ -92,7 +92,7 @@ tang::task<void> test_multiple_channels_select() {
     std::atomic_int received = 0;
     std::atomic_int received_count = 0;
     
-    // 创建三个发送协程，向不同的channel发送数据
+    // Create three sender coroutines to send data to different channels
     tang::go([&ch1]() -> tang::task<void> {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         ch1 << 10;
@@ -131,35 +131,35 @@ tang::task<void> test_multiple_channels_select() {
         );
     }
     
-    // 验证结果
+    // Verify result
     ASSERT(received.load() == 60);
     ASSERT(received_count.load() == 3);
     
-    std::cout << "多个channel的select测试通过!" << std::endl;
+    std::cout << "Select with multiple channels test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的发送case
+// Test select send case
 tang::task<void> test_select_send_case() {
-    std::cout << "测试select的发送case..." << std::endl;
-    // 创建两个channel
+    std::cout << "Testing select send case..." << std::endl;
+    // Create two channels
     tang::channel<int> ch1(1);
     tang::channel<int> ch2(1);
     
     std::atomic_int sent_value = 0;
     std::atomic_int selected_channel = 0;
     
-    // 先向ch1发送一个数据，使其满
+    // First send data to ch1 to make it full
     ch1 << 100;
     
-    // 创建接收协程，从ch1接收数据，使其可以继续发送
+    // Create receiver coroutine to receive from ch1, allowing further sends
     tang::go([&ch1]() -> tang::task<void> {
         int value;
         ch1 >> value;
         co_return;
     });
     
-    // 使用select选择发送到哪个channel
+    // Use select to choose which channel to send to
     int value = 42;
     
     tang::select(
@@ -173,27 +173,27 @@ tang::task<void> test_select_send_case() {
         })
     );
     
-    // 验证结果
+    // Verify result
     ASSERT(sent_value.load() == 42);
-    // 可能选择channel1或channel2，所以使用OR条件
+    // May choose channel1 or channel2, so use OR condition
     ASSERT(selected_channel.load() == 1 || selected_channel.load() == 2);
     
-    std::cout << "select的发送case测试通过!" << std::endl;
+    std::cout << "Select send case test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的公平性
+// Test select fairness
 tang::task<void> test_select_fairness() {
-    std::cout << "测试select的公平性..." << std::endl;
-    // 创建两个channel
+    std::cout << "Testing select fairness..." << std::endl;
+    // Create two channels
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     
     std::atomic_int ch1_count = 0;
     std::atomic_int ch2_count = 0;
-    const int total = 100; // 增加测试次数以更好地验证公平性
+    const int total = 100; // Increase test count to better verify fairness
     
-    // 创建两个发送协程，同时向两个channel发送数据
+    // Create two sender coroutines to send data to both channels simultaneously
     tang::go([&ch1, total]() -> tang::task<void> {
         for (int i = 0; i < total / 2; ++i) {
             ch1 << i;
@@ -208,7 +208,7 @@ tang::task<void> test_select_fairness() {
         co_return;
     });
     
-    // 使用select等待两个channel，统计每个channel被选中的次数
+    // Use select to wait on both channels, count selections for each channel
     int value;
     for (int i = 0; i < total; ++i) {
         tang::select(
@@ -221,23 +221,23 @@ tang::task<void> test_select_fairness() {
         );
     }
     
-    // 验证结果：两个channel被选中的次数应该大致相等（考虑到调度的不确定性）
+    // Verify result: both channels should be selected roughly equally (considering scheduling uncertainty)
     ASSERT(ch1_count.load() + ch2_count.load() == total);
     
-    // 计算偏差，确保公平性（允许10%的偏差）
+    // Calculate deviation to ensure fairness (allow 10% deviation)
     int expected = total / 2;
     int diff = std::abs(static_cast<int>(ch1_count.load()) - expected);
     double tolerance = expected * 0.1;
     ASSERT(diff <= tolerance);
     
-    std::cout << "select的公平性测试通过!" << std::endl;
+    std::cout << "Select fairness test passed!" << std::endl;
     std::cout << "ch1_count: " << ch1_count.load() << ", ch2_count: " << ch2_count.load() << std::endl;
     co_return;
 }
 
-// 测试select与channel关闭
+// Test select with channel close
 tang::task<void> test_select_with_channel_close() {
-    std::cout << "测试select与channel关闭..." << std::endl;
+    std::cout << "Testing select with channel close..." << std::endl;
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     std::atomic_int received_value = 0;
@@ -262,7 +262,7 @@ tang::task<void> test_select_with_channel_close() {
             received_value = value;
         }),
         tang::case_recv(ch2, value, [&]() {
-            // 关闭的channel不应被选中
+            // Closed channel should not be selected
             received_value = -1;
         })
     );
@@ -270,13 +270,13 @@ tang::task<void> test_select_with_channel_close() {
     ASSERT(received_value.load() == 100);
     ASSERT(close_handled.load());
     
-    std::cout << "select与channel关闭测试通过!" << std::endl;
+    std::cout << "Select with channel close test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的超时行为
+// Test select timeout behavior
 tang::task<void> test_select_timeout() {
-    std::cout << "测试select超时行为..." << std::endl;
+    std::cout << "Testing select timeout behavior..." << std::endl;
     tang::channel<int> ch;
     std::atomic_bool default_executed = false;
     int timeout_count = 0;
@@ -295,21 +295,21 @@ tang::task<void> test_select_timeout() {
     ASSERT(timeout_count == 5);
     ASSERT(default_executed.load());
     
-    std::cout << "select超时行为测试通过!" << std::endl;
+    std::cout << "Select timeout behavior test passed!" << std::endl;
     co_return;
 }
 
-// 测试大量channel的select
+// Test select with many channels
 tang::task<void> test_select_many_channels() {
-    std::cout << "测试大量channel的select..." << std::endl;
-    // 不使用vector，直接使用多个独立的channel变量
+    std::cout << "Testing select with many channels..." << std::endl;
+    // Don't use vector, use multiple independent channel variables directly
     std::atomic_int selected_channel = -1;
     
-    // 使用独立的channel数组代替vector
+    // Use independent channel array instead of vector
     tang::channel<int> ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8, ch9, ch10;
     tang::channel<int>* channels[] = {&ch1, &ch2, &ch3, &ch4, &ch5, &ch6, &ch7, &ch8, &ch9, &ch10};
     
-    // 随机选择一个channel发送数据
+    // Randomly select a channel to send data
     int target_channel = 5;
     tang::go([&channels, target_channel]() -> tang::task<void> {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -334,13 +334,13 @@ tang::task<void> test_select_many_channels() {
     ASSERT(selected_channel.load() == target_channel);
     ASSERT(value == 42);
     
-    std::cout << "大量channel的select测试通过!" << std::endl;
+    std::cout << "Select with many channels test passed!" << std::endl;
     co_return;
 }
 
-// 测试select中的异常处理
+// Test exception handling in select
 tang::task<void> test_select_exception_handling() {
-    std::cout << "测试select中的异常处理..." << std::endl;
+    std::cout << "Testing exception handling in select..." << std::endl;
     tang::channel<int> ch;
     std::atomic_bool exception_caught = false;
     std::atomic_bool callback_executed = false;
@@ -366,13 +366,13 @@ tang::task<void> test_select_exception_handling() {
     
     ASSERT(exception_caught.load());
     
-    std::cout << "select中的异常处理测试通过!" << std::endl;
+    std::cout << "Exception handling in select test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的混合recv和send
+// Test select with mixed recv and send
 tang::task<void> test_select_mixed_recv_send() {
-    std::cout << "测试select的混合recv和send..." << std::endl;
+    std::cout << "Testing select with mixed recv and send..." << std::endl;
     tang::channel<int> ch1(1);
     tang::channel<int> ch2;
     std::atomic_int operation_type = -1;
@@ -400,13 +400,13 @@ tang::task<void> test_select_mixed_recv_send() {
     
     ASSERT(operation_type.load() >= 0 && operation_type.load() <= 2);
     
-    std::cout << "select的混合recv和send测试通过!" << std::endl;
+    std::cout << "Select with mixed recv and send test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的递归使用
+// Test nested select usage
 tang::task<void> test_select_nested() {
-    std::cout << "测试select的嵌套使用..." << std::endl;
+    std::cout << "Testing nested select usage..." << std::endl;
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     std::atomic_int result = 0;
@@ -439,13 +439,13 @@ tang::task<void> test_select_nested() {
     
     ASSERT(result.load() == 3);
     
-    std::cout << "select的嵌套使用测试通过!" << std::endl;
+    std::cout << "Nested select usage test passed!" << std::endl;
     co_return;
 }
 
-// 测试select的多次选择
+// Test select with multiple selections
 tang::task<void> test_select_multiple_selections() {
-    std::cout << "测试select的多次选择..." << std::endl;
+    std::cout << "Testing select with multiple selections..." << std::endl;
     tang::channel<int> ch1;
     tang::channel<int> ch2;
     std::atomic_int select_count = 0;
@@ -483,11 +483,11 @@ tang::task<void> test_select_multiple_selections() {
     ASSERT(select_count.load() == 5);
     ASSERT(sum.load() == 10);
     
-    std::cout << "select的多次选择测试通过!" << std::endl;
+    std::cout << "Select with multiple selections test passed!" << std::endl;
     co_return;
 }
 
-// 测试运行器
+// Test runner
 tang::task<void> run_tests() {
     co_await test_basic_select();
     co_await test_select_with_default();
@@ -504,25 +504,25 @@ tang::task<void> run_tests() {
     co_return;
 }
 
-// 主函数
+// Main function
 int main() {
-    std::cout << "开始运行select测试..." << std::endl;
+    std::cout << "Starting select tests..." << std::endl;
     
     try {
-        // 初始化运行时
+        // Initialize runtime
         tang::runtime::init(2);
         
-        // 运行所有测试
+        // Run all tests
         auto test_task = run_tests();
         test_task.run();
         
-        // 运行调度器
+        // Run scheduler
         tang::runtime::run();
         
-        std::cout << "\n所有select测试通过!" << std::endl;
+        std::cout << "\nAll select tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "测试失败: " << e.what() << std::endl;
+        std::cerr << "Test failed: " << e.what() << std::endl;
         return 1;
     }
 }

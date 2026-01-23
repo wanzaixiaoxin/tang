@@ -9,6 +9,7 @@
 #include <memory>
 #include <chrono>
 #include <list>
+#include <tang/event_loop.h>
 
 namespace tang {
 namespace runtime {
@@ -35,11 +36,19 @@ public:
     
     void schedule(std::coroutine_handle<> handle);
     
+    /**
+     * @brief Get the event loop instance
+     * 
+     * @return Reference to the event loop
+     */
+    event_loop& get_event_loop();
+    
 private:
     std::vector<std::thread> threads_;
-    std::list<std::coroutine_handle<>> task_queue_;  // 使用list实现FIFO
+    std::list<std::coroutine_handle<>> task_queue_;  // Use list to implement FIFO
     std::mutex queue_mutex_;
     std::atomic_bool running_;
+    std::unique_ptr<event_loop> event_loop_;  ///< Event loop instance
 };
 
 } // namespace runtime

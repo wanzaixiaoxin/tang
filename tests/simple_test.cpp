@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <thread>
 
-// 简单的断言宏
+// Simple assertion macro
 #define ASSERT(condition) \
     do { \
         if (!(condition)) { \
@@ -15,45 +15,45 @@
         } \
     } while(0)
 
-// 测试基本的channel操作
+// Test basic channel operation
 void test_basic_channel() {
-    std::cout << "测试基本channel操作..." << std::endl;
-    // 创建一个channel
+    std::cout << "Testing basic channel operation..." << std::endl;
+    // Create a channel
     tang::channel<int> ch;
     
     int received = 0;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 创建接收协程
+    // Create receiver coroutine
     tang::go([&ch, &received]() -> tang::task<void> {
         ch >> received;
         co_return;
     });
     
-    // 发送数据
+    // Send data
     ch << 42;
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证结果
+    // Verify result
     ASSERT(received == 42);
     
-    std::cout << "基本channel操作测试通过!" << std::endl;
+    std::cout << "Basic channel operation test passed!" << std::endl;
 }
 
-// 主函数
+// Main function
 int main() {
-    std::cout << "开始运行简单测试..." << std::endl;
+    std::cout << "Starting simple tests..." << std::endl;
     
     try {
         test_basic_channel();
-        std::cout << "\n所有简单测试通过!" << std::endl;
+        std::cout << "\nAll simple tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "测试失败: " << e.what() << std::endl;
+        std::cerr << "Test failed: " << e.what() << std::endl;
         return 1;
     }
 }

@@ -34,7 +34,7 @@ private:
 #define TANG_DEFER_CONCAT(a, b) a##b
 #define TANG_DEFER_VAR_NAME(line) TANG_DEFER_CONCAT(__defer_, line)
 
-// 支持 defer { ... } 语法
+// Support defer { ... } syntax
 // defer macro: executes the given scope at the end of the surrounding scope
 // Usage: defer { /* code to run on exit */ } end_defer
 #define defer \

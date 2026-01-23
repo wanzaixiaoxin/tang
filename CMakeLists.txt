@@ -1,10 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 
-# 强制使用G++编译器
-if(NOT DEFINED CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER "g++")
-endif()
-
 project(tang_cpp20_coroutine_framework VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -25,9 +20,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g -O2 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    message(WARNING "检测到MSVC编译器: ${CMAKE_CXX_COMPILER_VERSION}")
-    # MSVC的警告选项
-    add_compile_options(/W4 /await)
+    message(STATUS "检测到MSVC编译器: ${CMAKE_CXX_COMPILER_VERSION}")
+    # MSVC的警告选项，注意使用/await:strict启用标准C++20协程支持
+    add_compile_options(/W4 /await:strict)
     # 根据编译模式设置不同的编译选项
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Od /DDEBUG")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
@@ -43,9 +38,23 @@ endif()
 
 include_directories(include)
 
-set(SOURCE_FILES
+set(COMMON_SOURCES
     src/runtime.cpp
+    src/event_poller.cpp
+    src/event_loop.cpp
 )
+
+if(WIN32)
+    set(SOURCE_FILES 
+        ${COMMON_SOURCES}
+        src/event_poller_win.cpp
+    )
+elseif(UNIX)
+    set(SOURCE_FILES
+        ${COMMON_SOURCES}
+        src/event_poller_linux.cpp
+    )
+endif()
 
 add_library(tang STATIC ${SOURCE_FILES})
 target_link_libraries(tang PUBLIC Threads::Threads)

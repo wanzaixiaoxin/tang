@@ -13,62 +13,62 @@
 
 namespace tang {
 
-// Select case类型
+// Select case type
 enum class select_case_type {
-    recv,    // 接收操作
-    send,    // 发送操作
-    default_case  // 默认操作
+    recv,    // receive operation
+    send,    // send operation
+    default_case  // default operation
 };
 
-// Select case基类
+// Select case base class
 class select_case {
 public:
     virtual ~select_case() = default;
     
-    // 获取case类型
+    // Get case type
     virtual select_case_type type() const = 0;
-    
-    // 尝试执行case
+
+    // Try execute case
     virtual bool try_execute() = 0;
-    
-    // 尝试检查是否可执行
+
+    // Try check if executable
     virtual bool try_ready() = 0;
-    
-    // 注册等待器
+
+    // Register waiter
     virtual void register_waiter(std::coroutine_handle<> handle) = 0;
-    
-    // 取消注册等待器
+
+    // Unregister waiter
     virtual void unregister_waiter() = 0;
-    
-    // 设置执行回调
+
+    // Set execution callback
     void set_callback(std::function<void()> callback) {
         callback_ = std::move(callback);
     }
-    
-    // 执行回调
+
+    // Execute callback
     void execute_callback() {
         if (callback_) {
             callback_();
         }
     }
-    
-    // 设置关联的select_awaiter
+
+    // Set associated select_awaiter
     void set_awaiter(void* awaiter) {
         awaiter_ = awaiter;
     }
-    
-    // 获取关联的select_awaiter
+
+    // Get associated select_awaiter
     void* get_awaiter() const {
         return awaiter_;
     }
     
 protected:
     std::function<void()> callback_;
-    void* awaiter_ = nullptr; // 关联的select_awaiter
-    std::coroutine_handle<> handle_; // 等待的协程句柄
+    void* awaiter_ = nullptr; // associated select_awaiter
+    std::coroutine_handle<> handle_; // waiting coroutine handle
 };
 
-// 接收case
+// Receive case
 template <typename T>
 class recv_case : public select_case {
 public:
@@ -96,19 +96,19 @@ public:
     }
     
     bool try_ready() override {
-        // 仅检查是否可执行，不执行实际操作
+        // Only check if executable, do not execute actual operation
         return !ch_.is_empty() || ch_.is_closed();
     }
-    
+
     void register_waiter(std::coroutine_handle<> handle) override {
         handle_ = handle;
-        // 注册到通道的接收等待者列表
-        // 注意：这里需要通道支持select等待者注册
+        // Register to channel's receive waiter list
+        // Note: channel needs to support select waiter registration
     }
-    
+
     void unregister_waiter() override {
         handle_ = nullptr;
-        // 从通道的接收等待者列表中移除
+        // Remove from channel's receive waiter list
     }
     
 private:
@@ -116,7 +116,7 @@ private:
     T* value_ptr_;
 };
 
-// 发送case
+// Send case
 template <typename T>
 class send_case : public select_case {
 public:
@@ -136,19 +136,19 @@ public:
     }
     
     bool try_ready() override {
-        // 仅检查是否可执行，不执行实际操作
+        // Only check if executable, do not execute actual operation
         return !ch_.is_full() || ch_.is_closed();
     }
-    
+
     void register_waiter(std::coroutine_handle<> handle) override {
         handle_ = handle;
-        // 注册到通道的发送等待者列表
-        // 注意：这里需要通道支持select等待者注册
+        // Register to channel's send waiter list
+        // Note: channel needs to support select waiter registration
     }
-    
+
     void unregister_waiter() override {
         handle_ = nullptr;
-        // 从通道的发送等待者列表中移除
+        // Remove from channel's send waiter list
     }
     
 private:
@@ -156,24 +156,24 @@ private:
     T value_;
 };
 
-// select_awaiter类
+// select_awaiter class
 class select_awaiter {
 public:
-    select_awaiter(std::vector<std::unique_ptr<select_case>> cases) 
+    select_awaiter(std::vector<std::unique_ptr<select_case>> cases)
         : cases_(std::move(cases)) {
-        // 为每个case设置关联的awaiter
+        // Set associated awaiter for each case
         for (auto& case_ptr : cases_) {
             case_ptr->set_awaiter(this);
         }
     }
-    
+
     bool await_ready() {
-        // 随机打乱顺序，实现公平性
+        // Shuffle randomly for fairness
         std::random_device rd;
         std::mt19937 g(rd());
         std::shuffle(cases_.begin(), cases_.end(), g);
-        
-        // 检查是否有case可以立即执行
+
+        // Check if any case can execute immediately
         for (auto& case_ptr : cases_) {
             if (case_ptr->try_ready()) {
                 selected_case_ = case_ptr.get();
@@ -183,46 +183,46 @@ public:
         }
         return false;
     }
-    
+
     void await_suspend(std::coroutine_handle<> handle) {
         handle_ = handle;
-        
-        // 注册所有case的等待者
+
+        // Register waiters for all cases
         for (auto& case_ptr : cases_) {
             case_ptr->register_waiter(handle);
         }
-        
-        // 再次检查是否有case可以立即执行（防止竞态条件）
+
+        // Check again if any case can execute immediately (prevent race condition)
         std::random_device rd;
         std::mt19937 g(rd());
         std::shuffle(cases_.begin(), cases_.end(), g);
-        
+
         for (auto& case_ptr : cases_) {
             if (case_ptr->try_ready()) {
                 selected_case_ = case_ptr.get();
                 selected_case_->try_execute();
-                
-                // 取消注册所有case的等待者
-                for (auto& case_ptr : cases_) {
-                    case_ptr->unregister_waiter();
+
+                // Unregister waiters for all cases
+                for (auto& cp : cases_) {
+                    cp->unregister_waiter();
                 }
-                
+
                 handle.resume();
                 return;
             }
         }
     }
-    
+
     void await_resume() noexcept {
-        // 取消注册所有case的等待者
+        // Unregister waiters for all cases
         for (auto& case_ptr : cases_) {
             case_ptr->unregister_waiter();
         }
-        
-        // 执行选中case的回调已在try_execute中完成
+
+        // Execution of selected case callback is already done in try_execute
     }
-    
-    // 唤醒等待的协程
+
+    // Wake up waiting coroutine
     void wake_up(select_case* selected_case) {
         selected_case_ = selected_case;
         selected_case_->try_execute();
@@ -235,74 +235,74 @@ private:
     std::coroutine_handle<> handle_;
 };
 
-// 协程等待select
+// Coroutine await select
 template <typename... Cases>
 auto co_select(Cases&&... cases) {
-    // 转换为unique_ptr数组
+    // Convert to unique_ptr array
     std::vector<std::unique_ptr<select_case>> case_ptrs;
     case_ptrs.reserve(sizeof...(Cases));
-    
-    // 收集所有case
+
+    // Collect all cases
     ([&case_ptrs](auto& case_obj) {
         case_ptrs.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
             std::forward<decltype(case_obj)>(case_obj)));
     }(cases), ...);
-    
+
     return select_awaiter(std::move(case_ptrs));
 }
 
-// 简化的select函数，直接执行select逻辑
+// Simplified select function, execute select logic directly
 template <typename... Cases>
 void select(Cases&&... cases) {
-    // 收集所有case到vector中
+    // Collect all cases into vector
     std::vector<std::unique_ptr<select_case>> case_ptrs;
     case_ptrs.reserve(sizeof...(Cases));
-    
-    // 收集所有case
+
+    // Collect all cases
     ([&case_ptrs](auto& case_obj) {
         case_ptrs.push_back(std::make_unique<std::remove_reference_t<decltype(case_obj)>>(
             std::forward<decltype(case_obj)>(case_obj)));
     }(cases), ...);
-    
-    // 随机打乱顺序，实现公平性
+
+    // Shuffle randomly for fairness
     std::random_device rd;
     std::mt19937 g(rd());
     std::shuffle(case_ptrs.begin(), case_ptrs.end(), g);
-    
-    // 尝试立即执行case
+
+    // Try to execute case immediately
     for (auto& case_ptr : case_ptrs) {
         if (case_ptr->try_ready()) {
             case_ptr->try_execute();
             return;
         }
     }
-    
-    // 如果没有立即可执行的case，检查是否有默认case
+
+    // If no immediately executable case, check if there is default case
     for (auto& case_ptr : case_ptrs) {
         if (case_ptr->type() == select_case_type::default_case) {
             case_ptr->try_execute();
             return;
         }
     }
-    
-    // 如果没有默认case，忙等待直到有case可执行
+
+    // If no default case, busy wait until a case can execute
     while (true) {
-        // 随机打乱顺序，实现公平性
+        // Shuffle randomly for fairness
         std::shuffle(case_ptrs.begin(), case_ptrs.end(), g);
-        
+
         for (auto& case_ptr : case_ptrs) {
             if (case_ptr->try_ready()) {
                 case_ptr->try_execute();
                 return;
             }
         }
-        
-        // 短暂睡眠，减少CPU占用
+
+        // Brief sleep to reduce CPU usage
         std::this_thread::sleep_for(std::chrono::microseconds(10));
     }
 }
 
-// 辅助函数：创建接收case
+// Helper functions: create receive case
 template <typename T>
 auto case_recv(channel<T>& ch, T& value) {
     return recv_case<T>(ch, value);
@@ -327,7 +327,7 @@ auto case_recv(channel<T>& ch, std::function<void()> callback) {
     return c;
 }
 
-// 辅助函数：创建发送case
+// Helper functions: create send case
 template <typename T>
 auto case_send(channel<T>& ch, const T& value) {
     return send_case<T>(ch, value);
@@ -352,39 +352,39 @@ auto case_send(channel<T>& ch, T&& value, std::function<void()> callback) {
     return c;
 }
 
-// 默认case类
+// Default case class
 class default_case_class : public select_case {
 public:
     default_case_class(std::function<void()> callback) : callback_(std::move(callback)) {}
-    
+
     select_case_type type() const override {
         return select_case_type::default_case;
     }
-    
+
     bool try_execute() override {
         if (callback_) {
             callback_();
         }
         return true;
     }
-    
+
     bool try_ready() override {
-        return true; // 默认case总是可执行
+        return true; // default case is always executable
     }
-    
+
     void register_waiter(std::coroutine_handle<> handle) override {
-        (void)handle; // 默认case不需要等待
+        (void)handle; // default case does not need to wait
     }
-    
+
     void unregister_waiter() override {
-        // 默认case不需要取消注册
+        // default case does not need to unregister
     }
-    
+
 private:
     std::function<void()> callback_;
 };
 
-// 默认case辅助函数
+// Default case helper function
 auto default_case(std::function<void()> callback) {
     return default_case_class(std::move(callback));
 }

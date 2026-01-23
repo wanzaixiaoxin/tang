@@ -7,7 +7,7 @@
 #include <thread>
 #include <functional>
 
-// 简单的断言宏
+// Simple assertion macro
 #define ASSERT(condition) \
     do { \
         if (!(condition)) { \
@@ -16,267 +16,268 @@
         } \
     } while(0)
 
-// 测试基本的协程创建和运行
+// Test basic coroutine creation and execution
 void test_basic_task() {
-    std::cout << "测试基本协程..." << std::endl;
+    std::cout << "Testing basic coroutine..." << std::endl;
     std::atomic_bool executed = false;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 创建协程
+    // Create coroutine
     tang::go([&executed]() {
         executed = true;
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证协程执行
+    // Verify coroutine execution
     ASSERT(executed.load());
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "基本协程测试通过!" << std::endl;
+    std::cout << "Basic coroutine test passed!" << std::endl;
 }
 
-// 测试协程函数的返回值
+// Test coroutine function return value
 void test_task_return_value() {
-    std::cout << "测试协程返回值..." << std::endl;
+    std::cout << "Testing coroutine return value..." << std::endl;
     std::atomic_int result = 0;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 定义一个返回值的协程函数
+    // Define a coroutine function that returns a value
     auto task_func = []() -> int {
         return 42;
     };
     
-    // 创建协程并获取结果
+    // Create coroutine and capture result in atomic variable
     tang::go([&result, &task_func]() {
         result = task_func();
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证返回值
+    // Verify return value
     ASSERT(result.load() == 42);
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "协程返回值测试通过!" << std::endl;
+    std::cout << "Coroutine return value test passed!" << std::endl;
 }
 
-// 测试多个协程的并发执行
+// Test multiple concurrent tasks
 void test_multiple_tasks() {
-    std::cout << "测试多个协程并发执行..." << std::endl;
-    const int num_tasks = 10; // 减少任务数量以加快测试
+    std::cout << "Testing multiple concurrent tasks..." << std::endl;
+    const int num_tasks = 10; // Reduce task count for faster test
     std::atomic_int executed_count = 0;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(4);
     
-    // 创建多个协程
+    // Create multiple coroutines
     for (int i = 0; i < num_tasks; ++i) {
         tang::go([&executed_count, i]() {
-            // 模拟一些工作
+            // Simulate some work to be done
             std::this_thread::sleep_for(std::chrono::microseconds(10));
             executed_count++;
         });
     }
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证所有协程都执行了
+    // Verify all coroutines have been executed
     ASSERT(executed_count.load() == num_tasks);
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "多个协程并发执行测试通过!" << std::endl;
+    std::cout << "Multiple concurrent tasks test passed!" << std::endl;
 }
 
-// 测试协程的异常处理
+// Test coroutine exception handling
 void test_task_exception() {
-    std::cout << "测试协程异常处理..." << std::endl;
+    std::cout << "Testing coroutine exception handling..." << std::endl;
     std::atomic_bool caught = false;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 创建一个会抛出异常的协程
+    // Create coroutine that throws an exception
     tang::go([&caught]() {
         try {
             throw std::runtime_error("Test exception");
         } catch (const std::exception& e) {
             caught = true;
+            std::cerr << "Caught exception: " << e.what() << std::endl;
         }
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证异常被捕获
+    // Verify exception is caught
     ASSERT(caught.load());
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "协程异常处理测试通过!" << std::endl;
+    std::cout << "Coroutine exception handling test passed!" << std::endl;
 }
 
-// 测试带参数的协程函数
+// Test coroutine function with parameters
 void test_task_with_parameters() {
-    std::cout << "测试带参数协程..." << std::endl;
+    std::cout << "Testing coroutine with parameters..." << std::endl;
     std::atomic_int result = 0;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 定义一个带参数的函数
+    // Define a function with parameters
     auto add_func = [](int a, int b) {
         return a + b;
     };
     
-    // 创建协程并传递参数
+    // Create coroutine and pass parameters
     tang::go([&result, &add_func]() {
         result = add_func(10, 20);
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证结果
+    // Verify result
     ASSERT(result.load() == 30);
     
-    // 停止运行时
+    // Stop runtime             
     tang::runtime::stop();
-    std::cout << "带参数协程测试通过!" << std::endl;
+    std::cout << "Coroutine with parameters test passed!" << std::endl;
 }
 
-// 测试协程的yield功能
+// Test coroutine yield functionality
 void test_task_yield() {
-    std::cout << "测试协程yield功能..." << std::endl;
+    std::cout << "Testing coroutine yield functionality..." << std::endl;
     std::atomic_int execution_order = 0;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 创建第一个协程
+    // Create first coroutine
     tang::go([&execution_order]() {
         execution_order++;
         
-        // 让出CPU
+        // Yield CPU
         tang::runtime::yield();
         
         execution_order += 2;
     });
     
-    // 创建第二个协程
+    // Create second coroutine
     tang::go([&execution_order]() {
         execution_order++;
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证执行顺序
+    // Verify execution order
     ASSERT(execution_order.load() == 4);
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "协程yield功能测试通过!" << std::endl;
+    std::cout << "Coroutine yield functionality test passed!" << std::endl;
 }
 
-// 测试spawn函数（与go同义）
+// Test spawn_function
 void test_spawn_function() {
-    std::cout << "测试spawn函数..." << std::endl;
+    std::cout << "Testing spawn function..." << std::endl;
     std::atomic_bool executed = false;
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 使用spawn创建协程
+    // Create coroutine using spawn
     tang::spawn([&executed]() {
         executed = true;
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 验证协程执行
+    // Verify coroutine execution
     ASSERT(executed.load());
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "spawn函数测试通过!" << std::endl;
+    std::cout << "Spawn function test passed!" << std::endl;
 }
 
-// 测试协程的睡眠功能
+// Test coroutine sleep functionality
 void test_task_sleep() {
-    std::cout << "测试协程睡眠功能..." << std::endl;
+    std::cout << "Testing coroutine sleep functionality..." << std::endl;
     auto start = std::chrono::steady_clock::now();
     
-    // 初始化运行时
+    // Initialize runtime
     tang::runtime::init(2);
     
-    // 创建一个睡眠的协程
+    // Create sleep coroutine
     tang::go([]() {
-        // 睡眠100毫秒
+        // Sleep 100 milliseconds
         tang::runtime::sleep_ms(100);
     });
     
-    // 运行调度器
+    // Run scheduler
     tang::runtime::run();
     
-    // 计算执行时间
+    // Calculate execution time     
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
-    // 验证至少睡眠了100毫秒
+    // Verify sleep duration is at least 100 milliseconds
     ASSERT(duration.count() >= 100);
     
-    // 停止运行时
+    // Stop runtime
     tang::runtime::stop();
-    std::cout << "协程睡眠功能测试通过!" << std::endl;
+    std::cout << "Coroutine sleep functionality test passed!" << std::endl;
 }
 
-// 测试不同线程数的运行时
+// Test different thread counts         
 void test_different_thread_counts() {
-    std::cout << "测试不同线程数..." << std::endl;
+    std::cout << "Testing different thread counts..." << std::endl;
     std::atomic_int executed_count = 0;
-    const int num_tasks = 10; // 减少任务数量以加快测试
+    const int num_tasks = 10; // Reduce task count for faster test
     
-    // 测试不同的线程数
-    for (int threads = 1; threads <= 2; ++threads) { // 减少测试的线程数范围
+    // Test different thread counts
+    for (int threads = 1; threads <= 2; ++threads) { // Reduce thread count range for faster test
         executed_count = 0;
         
-        // 初始化运行时，使用不同的线程数
+        // Initialize runtime with different thread count   
         tang::runtime::init(threads);
         
-        // 创建多个协程
+        // Create multiple coroutines
         for (int i = 0; i < num_tasks; ++i) {
             tang::go([&executed_count]() {
                 executed_count++;
             });
         }
         
-        // 运行调度器
+        // Run scheduler
         tang::runtime::run();
         
-        // 验证所有协程都执行了
+        // Verify all coroutines have been executed
         ASSERT(executed_count.load() == num_tasks);
         
-        // 停止运行时
+        // Stop runtime
         tang::runtime::stop();
     }
-    std::cout << "不同线程数测试通过!" << std::endl;
+    std::cout << "Different thread counts test passed!" << std::endl;
 }
 
-// 测试嵌套协程调用
+// Test nested coroutine calls
 void test_nested_coroutines() {
-    std::cout << "测试嵌套协程..." << std::endl;
+    std::cout << "Testing nested coroutine calls..." << std::endl;
     std::atomic_int result = 0;
     
     tang::runtime::init(2);
@@ -298,12 +299,12 @@ void test_nested_coroutines() {
     
     ASSERT(result.load() == 84);
     tang::runtime::stop();
-    std::cout << "嵌套协程测试通过!" << std::endl;
+    std::cout << "Nested coroutine calls test passed!" << std::endl;
 }
 
-// 测试协程间的多层嵌套
+// Test multi-level nested coroutines
 void test_multi_level_nested_coroutines() {
-    std::cout << "测试多层嵌套协程..." << std::endl;
+    std::cout << "Testing multi-level nested coroutines..." << std::endl;
     std::atomic_int result = 0;
     
     tang::runtime::init(2);
@@ -331,12 +332,12 @@ void test_multi_level_nested_coroutines() {
     
     ASSERT(result.load() == 60); // 10 * 2 * 3
     tang::runtime::stop();
-    std::cout << "多层嵌套协程测试通过!" << std::endl;
+    std::cout << "Multi-level nested coroutines test passed!" << std::endl;
 }
 
-// 测试任务组 - wait_all语义
+// Test task group - wait_all semantics
 void test_wait_all() {
-    std::cout << "测试任务组wait_all..." << std::endl;
+    std::cout << "Testing wait_all_all..." << std::endl;
     std::atomic_int counter = 0;
     const int num_tasks = 5;
     
@@ -359,12 +360,12 @@ void test_wait_all() {
     
     ASSERT(counter.load() == num_tasks);
     tang::runtime::stop();
-    std::cout << "任务组wait_all测试通过!" << std::endl;
+    std::cout << "Wait_all_all test passed!" << std::endl;
 }
 
-// 测试递归协程
+// Test recursive coroutine
 void test_recursive_coroutine() {
-    std::cout << "测试递归协程..." << std::endl;
+    std::cout << "Testing recursive coroutine..." << std::endl; 
     std::atomic_int sum = 0;
     
     tang::runtime::init(2);
@@ -401,12 +402,12 @@ void test_recursive_coroutine() {
     
     ASSERT(sum.load() == 55); // Fibonacci(10) = 55
     tang::runtime::stop();
-    std::cout << "递归协程测试通过!" << std::endl;
+    std::cout << "Recursive coroutine test passed!" << std::endl;
 }
 
-// 测试协程的异常传播
+// Test exception propagation
 void test_exception_propagation() {
-    std::cout << "测试异常传播..." << std::endl;
+    std::cout << "Testing exception propagation..." << std::endl;
     std::atomic_bool inner_exception_caught = false;
     std::atomic_bool outer_exception_caught = false;
     
@@ -423,6 +424,7 @@ void test_exception_propagation() {
             co_await t;
         } catch (const std::exception& e) {
             inner_exception_caught = true;
+            std::cerr << "Caught inner exception: " << e.what() << std::endl;
         }
         co_return;
     };
@@ -431,10 +433,11 @@ void test_exception_propagation() {
         try {
             auto t = catching_task();
             co_await t;
-            // 模拟另一个异常
+            // Simulate another exception to be caught
             throw std::runtime_error("Outer exception");
         } catch (const std::exception& e) {
             outer_exception_caught = true;
+            std::cerr << "Caught outer exception: " << e.what() << std::endl;
         }
         co_return;
     };
@@ -446,12 +449,12 @@ void test_exception_propagation() {
     ASSERT(inner_exception_caught.load());
     ASSERT(outer_exception_caught.load());
     tang::runtime::stop();
-    std::cout << "异常传播测试通过!" << std::endl;
+    std::cout << "Exception propagation test passed!" << std::endl;
 }
 
-// 测试协程的资源竞争
+// Test resource contention
 void test_resource_contention() {
-    std::cout << "测试资源竞争..." << std::endl;
+    std::cout << "Testing resource contention..." << std::endl;
     const int num_tasks = 10;
     const int increments_per_task = 1000;
     std::atomic_int shared_counter{0};
@@ -470,18 +473,18 @@ void test_resource_contention() {
     
     ASSERT(shared_counter.load() == num_tasks * increments_per_task);
     tang::runtime::stop();
-    std::cout << "资源竞争测试通过! 最终计数值: " << shared_counter.load() << std::endl;
+    std::cout << "Resource contention test passed! final count: " << shared_counter.load() << std::endl;
 }
 
-// 测试任务生命周期管理
+// Test task lifecycle management
 void test_task_lifecycle() {
-    std::cout << "测试任务生命周期..." << std::endl;
+    std::cout << "Testing task lifecycle management..." << std::endl;
     std::atomic_int lifecycle_events{0};
     
     tang::runtime::init(2);
     
     auto tracked_task = [&lifecycle_events]() -> tang::task<int> {
-        lifecycle_events++; // 开始
+        lifecycle_events++; // Start
         co_return 1;
     };
     
@@ -493,12 +496,12 @@ void test_task_lifecycle() {
     }
     
     tang::runtime::stop();
-    std::cout << "任务生命周期测试通过!" << std::endl;
+    std::cout << "Task lifecycle test passed!" << std::endl;
 }
 
-// 测试协程的并行执行
+// Test parallel execution
 void test_parallel_execution() {
-    std::cout << "测试并行执行..." << std::endl;
+    std::cout << "Testing parallel execution..." << std::endl;
     std::atomic_int start_time{0};
     std::atomic_int end_time_count{0};
     const int num_tasks = 4;
@@ -517,12 +520,12 @@ void test_parallel_execution() {
     
     ASSERT(end_time_count.load() == num_tasks);
     tang::runtime::stop();
-    std::cout << "并行执行测试通过!" << std::endl;
+    std::cout << "Parallel execution test passed!" << std::endl;
 }
 
-// 测试协程的数据传递
+// Test data passing
 void test_data_passing() {
-    std::cout << "测试数据传递..." << std::endl;
+    std::cout << "Testing data passing..." << std::endl;
     struct ComplexData {
         int id;
         std::string name;
@@ -551,12 +554,12 @@ void test_data_passing() {
     tang::runtime::run();
     ASSERT(received.load());
     tang::runtime::stop();
-    std::cout << "数据传递测试通过!" << std::endl;
+    std::cout << "Data passing test passed!" << std::endl;
 }
 
-// 测试协程的同步原语组合
+// Test sync primitives combo
 void test_sync_primitives_combo() {
-    std::cout << "测试同步原语组合..." << std::endl;
+    std::cout << "Testing sync primitives combo..." << std::endl;
     tang::channel<int> ch(5);
     std::atomic_int sum{0};
     const int num_tasks = 3;
@@ -585,15 +588,15 @@ void test_sync_primitives_combo() {
     
     tang::runtime::run();
     
-    // 验证数据完整性
+    // Verify data integrity
     ASSERT(sum.load() > 0);
     tang::runtime::stop();
-    std::cout << "同步原语组合测试通过! 总和: " << sum.load() << std::endl;
+    std::cout << "Sync primitives combo test passed! sum: " << sum.load() << std::endl;
 }
 
-// 主函数
+// Test main function
 int main() {
-    std::cout << "开始运行任务系统测试..." << std::endl;
+    std::cout << "Running task system tests..." << std::endl;
     
     try {
         test_basic_task();
@@ -616,10 +619,10 @@ int main() {
         test_data_passing();
         test_sync_primitives_combo();
         
-        std::cout << "\\n所有任务系统测试通过!" << std::endl;
+        std::cout << "\\nAll task system tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "测试失败: " << e.what() << std::endl;
+        std::cerr << "Task system test failed: " << e.what() << std::endl;
         return 1;
     }
 }

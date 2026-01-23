@@ -16,7 +16,7 @@
     } while(0)
 
 void test_runtime_init_single_thread() {
-    std::cout << "测试单线程运行时初始化..." << std::endl;
+    std::cout << "Testing single-threaded runtime initialization..." << std::endl;
     
     tang::runtime::init(1);
     
@@ -31,11 +31,11 @@ void test_runtime_init_single_thread() {
     ASSERT(counter.load() == 10);
     
     tang::runtime::stop();
-    std::cout << "单线程运行时初始化测试通过!" << std::endl;
+    std::cout << "Single-threaded runtime initialization test passed!" << std::endl;
 }
 
 void test_runtime_init_multi_thread() {
-    std::cout << "测试多线程运行时初始化..." << std::endl;
+    std::cout << "Testing multi-threaded runtime initialization..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -51,11 +51,11 @@ void test_runtime_init_multi_thread() {
     ASSERT(counter.load() == 20);
     
     tang::runtime::stop();
-    std::cout << "多线程运行时初始化测试通过!" << std::endl;
+    std::cout << "Multi-threaded runtime initialization test passed!" << std::endl;
 }
 
 void test_runtime_yield() {
-    std::cout << "测试运行时yield..." << std::endl;
+    std::cout << "Testing runtime yield..." << std::endl;
     
     tang::runtime::init(2);
     
@@ -78,11 +78,11 @@ void test_runtime_yield() {
     ASSERT(task1_order == 3 && task2_order == 2);
     
     tang::runtime::stop();
-    std::cout << "运行时yield测试通过!" << std::endl;
+    std::cout << "Runtime yield test passed!" << std::endl;
 }
 
 void test_runtime_sleep_ms() {
-    std::cout << "测试运行时sleep_ms..." << std::endl;
+    std::cout << "Testing runtime sleep_ms..." << std::endl;
     
     tang::runtime::init(2);
     
@@ -100,11 +100,11 @@ void test_runtime_sleep_ms() {
     ASSERT(duration.count() >= 45);
     
     tang::runtime::stop();
-    std::cout << "运行时sleep_ms测试通过!" << std::endl;
+    std::cout << "Runtime sleep_ms test passed!" << std::endl;
 }
 
 void test_runtime_multiple_init_stop_cycles() {
-    std::cout << "测试多次init/stop周期..." << std::endl;
+    std::cout << "Testing multiple init/stop cycles..." << std::endl;
     
     for (int cycle = 0; cycle < 3; ++cycle) {
         tang::runtime::init(2);
@@ -122,11 +122,11 @@ void test_runtime_multiple_init_stop_cycles() {
         tang::runtime::stop();
     }
     
-    std::cout << "多次init/stop周期测试通过!" << std::endl;
+    std::cout << "Multiple init/stop cycles test passed!" << std::endl;
 }
 
 void test_runtime_concurrent_tasks() {
-    std::cout << "测试运行时并发任务..." << std::endl;
+    std::cout << "Testing concurrent tasks..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -152,11 +152,11 @@ void test_runtime_concurrent_tasks() {
     ASSERT(sum.load() == expected_sum);
     
     tang::runtime::stop();
-    std::cout << "运行时并发任务测试通过!" << std::endl;
+    std::cout << "Concurrent tasks test passed!" << std::endl;
 }
 
 void test_runtime_work_distribution() {
-    std::cout << "测试运行时工作分配..." << std::endl;
+    std::cout << "Testing work distribution..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -178,11 +178,11 @@ void test_runtime_work_distribution() {
     ASSERT(total.load() == 4 * tasks_per_thread);
     
     tang::runtime::stop();
-    std::cout << "运行时工作分配测试通过!" << std::endl;
+    std::cout << "Work distribution test passed!" << std::endl;
 }
 
 void test_runtime_cpu_intensive_tasks() {
-    std::cout << "测试运行时CPU密集型任务..." << std::endl;
+    std::cout << "Testing CPU-intensive tasks..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -203,11 +203,11 @@ void test_runtime_cpu_intensive_tasks() {
     ASSERT(completed.load() == num_tasks);
     
     tang::runtime::stop();
-    std::cout << "运行时CPU密集型任务测试通过!" << std::endl;
+    std::cout << "CPU-intensive tasks test passed!" << std::endl;
 }
 
 void test_runtime_io_wait_tasks() {
-    std::cout << "测试运行时IO等待任务..." << std::endl;
+    std::cout << "Testing IO wait tasks..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -227,11 +227,11 @@ void test_runtime_io_wait_tasks() {
     ASSERT(completed.load() == num_tasks);
     
     tang::runtime::stop();
-    std::cout << "运行时IO等待任务测试通过!" << std::endl;
+    std::cout << "IO wait tasks test passed!" << std::endl;
 }
 
 void test_runtime_mixed_tasks() {
-    std::cout << "测试运行时混合任务..." << std::endl;
+    std::cout << "Testing mixed tasks..." << std::endl;
     
     tang::runtime::init(4);
     
@@ -265,11 +265,11 @@ void test_runtime_mixed_tasks() {
     ASSERT(io_completed.load() == io_tasks);
     
     tang::runtime::stop();
-    std::cout << "运行时混合任务测试通过!" << std::endl;
+    std::cout << "Mixed tasks test passed!" << std::endl;
 }
 
 void test_runtime_task_affinity() {
-    std::cout << "测试运行时任务亲和性..." << std::endl;
+    std::cout << "Testing task affinity..." << std::endl;
     
     tang::runtime::init(2);
     
@@ -296,11 +296,11 @@ void test_runtime_task_affinity() {
     ASSERT(task2_runs.load() == 5);
     
     tang::runtime::stop();
-    std::cout << "运行时任务亲和性测试通过!" << std::endl;
+    std::cout << "Task affinity test passed!" << std::endl;
 }
 
 int main() {
-    std::cout << "开始运行运行时测试..." << std::endl;
+    std::cout << "Running runtime tests..." << std::endl;
     
     try {
         test_runtime_init_single_thread();
@@ -315,10 +315,10 @@ int main() {
         test_runtime_mixed_tasks();
         test_runtime_task_affinity();
         
-        std::cout << "\n所有运行时测试通过!" << std::endl;
+        std::cout << "\nAll runtime tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "测试失败: " << e.what() << std::endl;
+        std::cerr << "Test failed: " << e.what() << std::endl;
         return 1;
     }
 }

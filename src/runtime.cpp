@@ -6,7 +6,7 @@
 namespace tang {
 namespace runtime {
 
-// 全局调度器实例
+// Global scheduler instance
 scheduler* g_scheduler = nullptr;
 
 scheduler::scheduler(size_t num_threads) : running_(false) {
@@ -17,6 +17,9 @@ scheduler::scheduler(size_t num_threads) : running_(false) {
         }
     }
     threads_.reserve(num_threads);
+    
+    // Initialize event loop
+    event_loop_ = std::make_unique<event_loop>();
 }
 
 scheduler::~scheduler() {
@@ -36,7 +39,7 @@ void scheduler::init() {
                 {
                     std::lock_guard<std::mutex> lock(queue_mutex_);
                     if (!task_queue_.empty()) {
-                        // 使用FIFO，从队列前端获取任务
+                        // Use FIFO, get task from front of queue
                         handle = task_queue_.front();
                         task_queue_.pop_front();
                     }
@@ -45,7 +48,7 @@ void scheduler::init() {
                 if (handle) {
                     handle.resume();
                 } else {
-                    // 无任务时短暂睡眠，减少CPU占用
+                    // Short sleep when no tasks to reduce CPU usage
                     std::this_thread::sleep_for(std::chrono::microseconds(100));
                 }
             }
@@ -56,7 +59,7 @@ void scheduler::init() {
 void scheduler::run() {
     init();
     
-    // 运行一段时间，让任务有机会完成
+    // Run for a while to let tasks complete
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     
     stop();
@@ -67,7 +70,12 @@ void scheduler::stop() {
         return;
     }
     
-    // 等待所有线程结束
+    // Stop event loop
+    if (event_loop_) {
+        event_loop_->stop();
+    }
+    
+    // Wait for all threads to finish
     for (auto& thread : threads_) {
         if (thread.joinable()) {
             thread.join();
@@ -81,12 +89,16 @@ void scheduler::stop() {
     }
 }
 
+event_loop& scheduler::get_event_loop() {
+    return *event_loop_;
+}
+
 void scheduler::schedule(std::coroutine_handle<> handle) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
     task_queue_.push_back(handle);
 }
 
-// 全局函数实现
+// Global function implementations
 
 void init(size_t num_threads) {
     if (!g_scheduler) {
@@ -119,8 +131,8 @@ void schedule(std::coroutine_handle<> handle) {
 
 void yield() {
     std::this_thread::yield();
-    // 让出后重新调度
-    schedule(std::coroutine_handle<>::from_address(nullptr));
+    // 让出CPU时间片，但不调度空句柄
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
 }
 
 void sleep_ms(size_t ms) {

@@ -6,15 +6,17 @@
 #include <stdexcept>
 #include <functional>
 #include <type_traits>
+#include <chrono>
+#include <thread>
 
 namespace tang {
 
-// 前向声明
+// Forward declaration
 namespace runtime {
     void schedule(std::coroutine_handle<> handle);
 }
 
-// 协程任务类
+// Coroutine task class
 template <typename T = void>
 class task {
 public:
@@ -215,6 +217,11 @@ public:
         if (handle) {
             runtime::schedule(handle);
         }
+    }
+    
+    static task<void> sleep(std::chrono::milliseconds duration) {
+        std::this_thread::sleep_for(duration);
+        co_return;
     }
     
 private:

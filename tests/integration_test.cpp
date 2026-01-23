@@ -18,7 +18,7 @@
     } while(0)
 
 void test_producer_consumer_pattern() {
-    std::cout << "测试生产者-消费者模式..." << std::endl;
+    std::cout << "Testing producer-consumer pattern..." << std::endl;
     const int num_producers = 3;
     const int num_consumers = 2;
     const int items_per_producer = 50;
@@ -56,14 +56,14 @@ void test_producer_consumer_pattern() {
     ASSERT(total_produced.load() == num_producers * items_per_producer);
     ASSERT(total_consumed.load() == num_producers * items_per_producer);
     tang::runtime::stop();
-    std::cout << "生产者-消费者模式测试通过!" << std::endl;
+    std::cout << "Producer-consumer pattern test passed!" << std::endl;
 }
 
 void test_pipeline_pattern() {
-    std::cout << "测试管道模式..." << std::endl;
+    std::cout << "Testing pipeline pattern..." << std::endl;
     const int num_items = 20;
     
-    // 使用独立的channel变量，避免使用vector
+    // Use separate channel variables to avoid using vector
     tang::channel<int> stage0(10);
     tang::channel<int> stage1(10);
     tang::channel<int> stage2(10);
@@ -115,16 +115,16 @@ void test_pipeline_pattern() {
     
     ASSERT(processed_count.load() == num_items);
     tang::runtime::stop();
-    std::cout << "管道模式测试通过!" << std::endl;
+    std::cout << "Pipeline pattern test passed!" << std::endl;
 }
 
 void test_fan_out_pattern() {
-    std::cout << "测试扇出模式..." << std::endl;
+    std::cout << "Testing fan-out pattern..." << std::endl;
     const int num_workers = 4;
     const int items_per_worker = 25;
     tang::channel<int> input(50);
     
-    // 使用独立的channel变量，避免使用vector
+    // Use separate channel variables to avoid using vector
     tang::channel<int> worker0(10);
     tang::channel<int> worker1(10);
     tang::channel<int> worker2(10);
@@ -188,11 +188,11 @@ void test_fan_out_pattern() {
     ASSERT(total_distributed.load() == num_workers * items_per_worker);
     ASSERT(total_processed.load() == num_workers * items_per_worker);
     tang::runtime::stop();
-    std::cout << "扇出模式测试通过!" << std::endl;
+    std::cout << "Fan-out pattern test passed!" << std::endl;
 }
 
 void test_fan_in_pattern() {
-    std::cout << "测试扇入模式..." << std::endl;
+    std::cout << "Testing fan-in pattern..." << std::endl;
     const int num_sources = 4;
     const int items_per_source = 25;
     tang::channel<int> ch0, ch1, ch2, ch3;
@@ -284,11 +284,11 @@ void test_fan_in_pattern() {
     ASSERT(total_sent.load() == num_sources * items_per_source);
     ASSERT(total_received.load() == num_sources * items_per_source);
     tang::runtime::stop();
-    std::cout << "扇入模式测试通过!" << std::endl;
+    std::cout << "Fan-in pattern test passed!" << std::endl;
 }
 
 void test_parallel_computation() {
-    std::cout << "测试并行计算..." << std::endl;
+    std::cout << "Testing parallel computation..." << std::endl;
     const int num_tasks = 10;
     const int data_size = 1000;
     std::atomic<long long> total_sum{0};
@@ -313,11 +313,11 @@ void test_parallel_computation() {
     }
     ASSERT(total_sum.load() == expected);
     tang::runtime::stop();
-    std::cout << "并行计算测试通过!" << std::endl;
+    std::cout << "Parallel computation test passed!" << std::endl;
 }
 
 void test_concurrent_accumulation() {
-    std::cout << "测试并发累加..." << std::endl;
+    std::cout << "Testing concurrent accumulation..." << std::endl;
     const int num_workers = 8;
     const int iterations = 10000;
     std::atomic<long long> counter{0};
@@ -336,11 +336,11 @@ void test_concurrent_accumulation() {
     
     ASSERT(counter.load() == num_workers * iterations);
     tang::runtime::stop();
-    std::cout << "并发累加测试通过!" << std::endl;
+    std::cout << "Concurrent accumulation test passed!" << std::endl;
 }
 
 void test_barrier_pattern() {
-    std::cout << "测试屏障模式..." << std::endl;
+    std::cout << "Testing barrier pattern..." << std::endl;
     const int num_workers = 4;
     std::atomic_int ready_count{0};
     std::atomic_int completed_count{0};
@@ -353,7 +353,7 @@ void test_barrier_pattern() {
         tang::go([&ready_count, &completed_count, &start_ch, &done_ch, w]() {
             ready_count++;
             
-            // 等待所有worker准备就绪
+            // Wait for all workers to be ready
             int dummy;
             start_ch >> dummy;
             
@@ -362,12 +362,12 @@ void test_barrier_pattern() {
         });
     }
     
-    // 等待所有worker准备就绪
+    // Wait for all workers to be ready
     while (ready_count.load() < num_workers) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
-    // 通知所有worker开始
+    // Notify all workers to start
     for (int w = 0; w < num_workers; ++w) {
         start_ch << 1;
     }
@@ -376,11 +376,11 @@ void test_barrier_pattern() {
     
     ASSERT(completed_count.load() == num_workers);
     tang::runtime::stop();
-    std::cout << "屏障模式测试通过!" << std::endl;
+    std::cout << "Barrier pattern test passed!" << std::endl;
 }
 
 void test_broadcast_pattern() {
-    std::cout << "测试广播模式..." << std::endl;
+    std::cout << "Testing broadcast pattern..." << std::endl;
     const int num_listeners = 3;
     const int messages = 5;
     std::atomic_int total_received{0};
@@ -411,11 +411,11 @@ void test_broadcast_pattern() {
     
     ASSERT(total_received.load() == messages * num_listeners);
     tang::runtime::stop();
-    std::cout << "广播模式测试通过!" << std::endl;
+    std::cout << "Broadcast pattern test passed!" << std::endl;
 }
 
 void test_work_stealing_simulation() {
-    std::cout << "测试工作窃取模拟..." << std::endl;
+    std::cout << "Testing work stealing simulation..." << std::endl;
     const int num_workers = 4;
     const int tasks_per_thread = 20;
     std::vector<std::queue<int>> local_queues(num_workers);
@@ -437,12 +437,12 @@ void test_work_stealing_simulation() {
             while (completed < tasks_per_thread) {
                 int task_id = -1;
                 
-                // 尝试从本地队列获取任务
+                // Try to get task from local queue
                 if (!local_queues[t].empty()) {
                     task_id = local_queues[t].front();
                     local_queues[t].pop();
                 } else {
-                    // 尝试窃取其他队列的任务
+                    // Try to steal tasks from other queues
                     for (int other = 0; other < num_workers; ++other) {
                         if (other != t && !local_queues[other].empty()) {
                             task_id = local_queues[other].front();
@@ -453,7 +453,7 @@ void test_work_stealing_simulation() {
                 }
                 
                 if (task_id != -1) {
-                    // 模拟任务执行
+                    // Simulate task execution
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     completed++;
                     total_completed++;
@@ -503,11 +503,11 @@ void test_cancellation_simulation() {
     ASSERT(completed_tasks.load() == num_tasks);
     ASSERT(cancel_flag.load() == true);
     tang::runtime::stop();
-    std::cout << "取消模拟测试通过!" << std::endl;
+    std::cout << "Cancellation simulation test passed!" << std::endl;
 }
 
 int main() {
-    std::cout << "开始运行集成测试..." << std::endl;
+    std::cout << "Running integration tests..." << std::endl;
     
     try {
         test_producer_consumer_pattern();
@@ -521,10 +521,10 @@ int main() {
         test_work_stealing_simulation();
         test_cancellation_simulation();
         
-        std::cout << "\n所有集成测试通过!" << std::endl;
+        std::cout << "\nAll integration tests passed!" << std::endl;
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "测试失败: " << e.what() << std::endl;
+        std::cerr << "Test failed: " << e.what() << std::endl;
         return 1;
     }
 }

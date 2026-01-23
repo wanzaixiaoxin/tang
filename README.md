@@ -58,7 +58,10 @@ cmake ..
 #cmake .. -G "MinGW Makefiles" -DCMAKE_CXX_COMPILER=g++
 
 # 编译
-cmake --build .
+cmake --build . --config Release
+
+# 或者仅构建库而不包括测试
+cmake --build . --config Release --target tang
 
 # 运行示例（可选）
 ./examples/hello_world
