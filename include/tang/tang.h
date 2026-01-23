@@ -4,6 +4,7 @@
 // 包含所有Tang组件
 #include <tang/task.h>
 #include <tang/runtime.h>
+#include <tang/runtime_scope.h>
 #include <tang/channel.h>
 #include <tang/select.h>
 #include <tang/defer.h>

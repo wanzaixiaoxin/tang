@@ -10,7 +10,7 @@
  * Test producer-consumer pattern
  */
 TEST(producer_consumer_pattern) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     const int num_producers = 3;
     const int num_consumers = 2;
@@ -52,7 +52,7 @@ TEST(producer_consumer_pattern) {
  * Test pipeline pattern
  */
 TEST(pipeline_pattern) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     const int num_items = 20;
     
@@ -119,7 +119,7 @@ TEST(pipeline_pattern) {
  * Test work stealing pattern
  */
 TEST(work_stealing_pattern) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     const int num_tasks = 40;
     tang::channel<int> task_queue(20);
@@ -157,7 +157,7 @@ TEST(work_stealing_pattern) {
  * Test fan-out fan-in pattern
  */
 TEST(fan_out_fan_in_pattern) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     const int num_inputs = 30;
     const int num_workers = 3;
@@ -204,7 +204,7 @@ TEST(fan_out_fan_in_pattern) {
  * Test mixed patterns integration
  */
 TEST(mixed_patterns_integration) {
-    tang::test::RuntimeScope runtime(6);
+    tang::RuntimeScope runtime(6);
     
     const int num_items = 25;
     tang::channel<int> data_channel(15);
@@ -275,7 +275,7 @@ TEST(mixed_patterns_integration) {
  * Test error handling in integration scenarios
  */
 TEST(integration_error_handling) {
-    tang::test::RuntimeScope runtime(3);
+    tang::RuntimeScope runtime(3);
     
     tang::channel<int> ch(5);
     std::atomic_int successful_operations{0};
@@ -317,7 +317,7 @@ TEST(integration_error_handling) {
 TEST(integration_resource_cleanup) {
     // Test multiple runtime cycles
     for (int cycle = 0; cycle < 3; ++cycle) {
-        tang::test::RuntimeScope runtime(2);
+        tang::RuntimeScope runtime(2);
         
         tang::channel<int> ch(5);
         std::atomic_int processed{0};

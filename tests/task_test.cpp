@@ -8,7 +8,7 @@
  * Test basic coroutine creation and execution
  */
 TEST(basic_task) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     std::atomic_bool executed = false;
     
@@ -28,7 +28,7 @@ TEST(basic_task) {
  * Test coroutine function return value
  */
 TEST(task_return_value) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     std::atomic_int result = 0;
     
@@ -53,7 +53,7 @@ TEST(task_return_value) {
  * Test multiple concurrent tasks
  */
 TEST(multiple_tasks) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     const int num_tasks = 10; // Reduce task count for faster test
     std::atomic_int executed_count = 0;
@@ -78,7 +78,7 @@ TEST(multiple_tasks) {
  * Test task with exception handling
  */
 TEST(task_exception_handling) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     std::atomic_bool exception_caught = false;
     
@@ -102,7 +102,7 @@ TEST(task_exception_handling) {
  * Test task with sleep functionality
  */
 TEST(task_with_sleep) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     std::atomic_bool executed = false;
     auto start_time = std::chrono::steady_clock::now();
@@ -131,7 +131,7 @@ TEST(task_with_sleep) {
 TEST(task_different_thread_counts) {
     // Test with single thread
     {
-        tang::test::RuntimeScope runtime(1);
+        tang::RuntimeScope runtime(1);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 5; ++i) {
@@ -146,7 +146,7 @@ TEST(task_different_thread_counts) {
     
     // Test with multiple threads
     {
-        tang::test::RuntimeScope runtime(4);
+        tang::RuntimeScope runtime(4);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 20; ++i) {

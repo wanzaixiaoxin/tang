@@ -8,7 +8,7 @@
  * Test single-threaded runtime initialization
  */
 TEST(runtime_init_single_thread) {
-    tang::test::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(1);
     
     std::atomic_int counter{0};
     for (int i = 0; i < 10; ++i) {
@@ -25,7 +25,7 @@ TEST(runtime_init_single_thread) {
  * Test multi-threaded runtime initialization
  */
 TEST(runtime_init_multi_thread) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     std::atomic_int counter{0};
     for (int i = 0; i < 20; ++i) {
@@ -43,7 +43,7 @@ TEST(runtime_init_multi_thread) {
  * Test runtime yield functionality
  */
 TEST(runtime_yield) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     std::atomic_int order{0};
     int task1_order = 0, task2_order = 0;
@@ -71,7 +71,7 @@ TEST(runtime_yield) {
  * Test runtime sleep_ms functionality
  */
 TEST(runtime_sleep_ms) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     auto start = std::chrono::steady_clock::now();
     
@@ -93,7 +93,7 @@ TEST(runtime_sleep_ms) {
 TEST(runtime_different_thread_counts) {
     // Test with 1 thread
     {
-        tang::test::RuntimeScope runtime(1);
+        tang::RuntimeScope runtime(1);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 5; ++i) {
@@ -108,7 +108,7 @@ TEST(runtime_different_thread_counts) {
     
     // Test with 8 threads
     {
-        tang::test::RuntimeScope runtime(8);
+        tang::RuntimeScope runtime(8);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 40; ++i) {
@@ -126,7 +126,7 @@ TEST(runtime_different_thread_counts) {
  * Test runtime with mixed operations
  */
 TEST(runtime_mixed_operations) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     std::atomic_int counter{0};
     std::atomic_bool sleep_completed{false};
@@ -155,7 +155,7 @@ TEST(runtime_mixed_operations) {
 TEST(runtime_stop_restart) {
     // First run
     {
-        tang::test::RuntimeScope runtime(2);
+        tang::RuntimeScope runtime(2);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 5; ++i) {
@@ -170,7 +170,7 @@ TEST(runtime_stop_restart) {
     
     // Second run (should work independently)
     {
-        tang::test::RuntimeScope runtime(3);
+        tang::RuntimeScope runtime(3);
         std::atomic_int counter{0};
         
         for (int i = 0; i < 8; ++i) {

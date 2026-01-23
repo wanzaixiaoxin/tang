@@ -8,7 +8,7 @@
  * Test basic select operation
  */
 TEST(basic_select) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create two channels
     tang::channel<int> ch1;
@@ -47,7 +47,7 @@ TEST(basic_select) {
  * Test select with default case
  */
 TEST(select_with_default) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create a channel
     tang::channel<int> ch;
@@ -73,7 +73,7 @@ TEST(select_with_default) {
  * Test select with multiple channels
  */
 TEST(multiple_channels_select) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     // Create three channels
     tang::channel<int> ch1;
@@ -129,7 +129,7 @@ TEST(multiple_channels_select) {
  * Test select with send operations
  */
 TEST(select_with_send) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create channels
     tang::channel<int> ch1;
@@ -169,7 +169,7 @@ TEST(select_with_send) {
  * Test select with timeout using default case
  */
 TEST(select_with_timeout) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create a channel
     tang::channel<int> ch;
@@ -198,7 +198,7 @@ TEST(select_with_timeout) {
  * Test select with mixed operations and priorities
  */
 TEST(select_mixed_operations) {
-    tang::test::RuntimeScope runtime(3);
+    tang::RuntimeScope runtime(3);
     
     // Create channels
     tang::channel<int> ch1;
@@ -262,7 +262,7 @@ TEST(select_mixed_operations) {
  * Test select with channel closure
  */
 TEST(select_with_channel_closure) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create a channel and close it
     tang::channel<int> ch;
@@ -292,7 +292,7 @@ TEST(select_with_channel_closure) {
  * Test select with multiple operations in sequence
  */
 TEST(select_multiple_operations_sequence) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     tang::channel<int> ch1;
     tang::channel<int> ch2;
@@ -351,7 +351,7 @@ TEST(select_multiple_operations_sequence) {
  * Test select with complex nested operations
  */
 TEST(select_complex_nested) {
-    tang::test::RuntimeScope runtime(3);
+    tang::RuntimeScope runtime(3);
     
     tang::channel<int> ch1;
     tang::channel<int> ch2;

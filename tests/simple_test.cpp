@@ -7,7 +7,7 @@
  * Test basic coroutine functionality
  */
 TEST(basic_coroutine) {
-    tang::test::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(1);
     
     std::atomic_bool executed = false;
     
@@ -27,7 +27,7 @@ TEST(basic_coroutine) {
  * Test basic channel operation
  */
 TEST(basic_channel_operation) {
-    tang::test::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(1);
     
     tang::channel<int> ch;
     int received = 0;
@@ -38,10 +38,10 @@ TEST(basic_channel_operation) {
         co_return;
     });
     
-    // Send data
+    // Send data before running scheduler
     ch << 42;
     
-    // Run scheduler
+    // Run scheduler to process both operations
     runtime.run();
     
     // Verify result
@@ -52,7 +52,7 @@ TEST(basic_channel_operation) {
  * Test channel with multiple operations
  */
 TEST(channel_multiple_operations) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     tang::channel<int> ch(5); // Buffered channel with capacity 5
     std::atomic_int received_count{0};
@@ -67,12 +67,12 @@ TEST(channel_multiple_operations) {
         co_return;
     });
     
-    // Send multiple values
+    // Send multiple values before running scheduler
     for (int i = 0; i < 5; ++i) {
         ch << i;
     }
     
-    // Run scheduler
+    // Run scheduler to process all operations
     runtime.run();
     
     // Verify result
@@ -83,7 +83,7 @@ TEST(channel_multiple_operations) {
  * Test channel closure
  */
 TEST(channel_closure) {
-    tang::test::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(1);
     
     tang::channel<int> ch;
     std::atomic_bool receiver_finished{false};
@@ -111,7 +111,7 @@ TEST(channel_closure) {
  * Test coroutine with sleep
  */
 TEST(coroutine_with_sleep) {
-    tang::test::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(1);
     
     std::atomic_bool executed{false};
     auto start_time = std::chrono::steady_clock::now();

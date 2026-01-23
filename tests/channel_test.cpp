@@ -8,7 +8,7 @@
  * Test basic channel send and receive
  */
 TEST(basic_channel) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create an unbuffered channel
     tang::channel<int> ch;
@@ -37,7 +37,7 @@ TEST(basic_channel) {
  * Test buffered channel
  */
 TEST(buffered_channel) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create a buffered channel with capacity 5
     tang::channel<int> ch(5);
@@ -74,7 +74,7 @@ TEST(buffered_channel) {
  * Test channel close
  */
 TEST(channel_close) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Create a channel
     tang::channel<int> ch(2);
@@ -105,7 +105,7 @@ TEST(channel_close) {
  * Test channel with multiple producers and consumers
  */
 TEST(channel_multiple_producers_consumers) {
-    tang::test::RuntimeScope runtime(4);
+    tang::RuntimeScope runtime(4);
     
     tang::channel<int> ch(10);
     std::atomic_int total_received{0};
@@ -144,7 +144,7 @@ TEST(channel_multiple_producers_consumers) {
  * Test channel with blocking operations
  */
 TEST(channel_blocking_operations) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     tang::channel<int> ch;
     std::atomic_int received_value{0};
@@ -182,7 +182,7 @@ TEST(channel_blocking_operations) {
  * Test channel with different data types
  */
 TEST(channel_different_data_types) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Test with string
     {
@@ -243,7 +243,7 @@ TEST(channel_different_data_types) {
  * Test channel capacity limits
  */
 TEST(channel_capacity_limits) {
-    tang::test::RuntimeScope runtime(2);
+    tang::RuntimeScope runtime(2);
     
     // Test zero capacity (unbuffered)
     {
