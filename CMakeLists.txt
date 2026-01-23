@@ -42,6 +42,7 @@ set(COMMON_SOURCES
     src/runtime.cpp
     src/event_poller.cpp
     src/event_loop.cpp
+    src/logger.cpp
 )
 
 if(WIN32)

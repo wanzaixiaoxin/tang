@@ -10,6 +10,8 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <sstream>
+#include "tang/logger.h"
 
 namespace tang {
 
@@ -161,13 +163,21 @@ public:
     // Try send
     bool try_send(const T& value) {
         std::lock_guard<std::mutex> lock(mutex_);
+        
+        std::stringstream debug_msg;
+        debug_msg << "try_send called, buffer size: " << buffer_.size() 
+                  << ", recv_waiters: " << recv_waiters_.size() 
+                  << ", send_waiters: " << send_waiters_.size();
+        LOG_DEBUG(tang::logger::channel, debug_msg.str());
 
         if (closed_) {
+            LOG_DEBUG(tang::logger::channel, "Channel closed, send failed");
             return false;
         }
 
         // If there are receive waiters, send directly
         if (!recv_waiters_.empty()) {
+            LOG_DEBUG(tang::logger::channel, "Sending directly to receiver waiter");
             auto waiter = std::move(recv_waiters_.front());
             recv_waiters_.pop_front();
             *(waiter->get_value_ptr()) = value;
@@ -177,9 +187,11 @@ public:
 
         // Otherwise check if buffer is full
         if (capacity_ == 0 || buffer_.size() >= capacity_) {
+            LOG_DEBUG(tang::logger::channel, "Buffer full, send failed");
             return false;
         }
 
+        LOG_DEBUG(tang::logger::channel, "Adding to buffer");
         buffer_.push_back(value);
         return true;
     }
@@ -211,18 +223,24 @@ public:
 
     // Send operator - blocking send
     channel& operator<<(T&& value) {
+        LOG_DEBUG(tang::logger::channel, "Sending value");
         while (!try_send(std::move(value))) {
             // Simple busy wait, should suspend coroutine in practice
+            LOG_DEBUG(tang::logger::channel, "Send blocked, waiting...");
             std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
+        LOG_DEBUG(tang::logger::channel, "Send completed");
         return *this;
     }
 
     channel& operator<<(const T& value) {
+        LOG_DEBUG(tang::logger::channel, "Sending value");
         while (!try_send(value)) {
             // Simple busy wait, should suspend coroutine in practice
+            LOG_DEBUG(tang::logger::channel, "Send blocked, waiting...");
             std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
+        LOG_DEBUG(tang::logger::channel, "Send completed");
         return *this;
     }
     
@@ -264,10 +282,13 @@ public:
 
     // Receive operator - blocking receive
     bool operator>>(T& value) {
+        LOG_DEBUG(tang::logger::channel, "Attempting to receive value");
         while (!try_recv(value)) {
             // Simple busy wait, should suspend coroutine in practice
+            LOG_DEBUG(tang::logger::channel, "Receive blocked, waiting...");
             std::this_thread::sleep_for(std::chrono::microseconds(10));
         }
+        LOG_DEBUG(tang::logger::channel, "Receive completed");
         return true;
     }
 

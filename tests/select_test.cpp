@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <thread>
 #include <functional>
-
+#include <tang/logger.h>
 // Simple assertion macro
 #define ASSERT(condition) \
     do { \

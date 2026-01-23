@@ -8,6 +8,26 @@
 #include <type_traits>
 #include <chrono>
 #include <thread>
+#include <iostream>
+#include <sstream>
+#include "tang/logger.h"
+
+// Debug logging macros for task system
+#define TASK_DEBUG 1
+
+#if TASK_DEBUG
+#define TASK_DEBUG_LOG(msg) do { \
+    std::stringstream ss; \
+    ss << msg; \
+    LOG_DEBUG(tang::logger::task, ss.str()); \
+} while(0)
+#define TASK_DEBUG_LOG_FUNC() LOG_DEBUG_FUNC(tang::logger::task)
+#define TASK_DEBUG_LOG_HANDLE(handle) LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::task, handle)
+#else
+#define TASK_DEBUG_LOG(msg)
+#define TASK_DEBUG_LOG_FUNC()
+#define TASK_DEBUG_LOG_HANDLE(handle)
+#endif
 
 namespace tang {
 
@@ -113,10 +133,17 @@ public:
     }
     
     void run() {
-        if (handle) {
-            runtime::schedule(handle);
-        }
+    TASK_DEBUG_LOG_FUNC();
+    TASK_DEBUG_LOG_HANDLE(handle);
+    
+    if (handle) {
+        TASK_DEBUG_LOG("Scheduling task");
+        runtime::schedule(handle);
+        TASK_DEBUG_LOG("Task scheduled");
+    } else {
+        TASK_DEBUG_LOG("No handle to schedule");
     }
+}
     
 private:
     handle_type handle;
@@ -247,9 +274,16 @@ struct go_helper<void> {
 
 template <typename F, typename... Args>
 auto go(F&& f, Args&&... args) {
+    TASK_DEBUG_LOG_FUNC();
+    TASK_DEBUG_LOG("Creating task from function");
+    
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    
+    TASK_DEBUG_LOG("Running task");
     task.run(); // 立即调度任务
+    
+    TASK_DEBUG_LOG("Task created and scheduled");
     return task;
 }
 

@@ -85,8 +85,7 @@ void exception_defer_example() {
         std::cout << "Doing work before exception" << std::endl;
         
         throw std::runtime_error("Test exception");
-        
-        std::cout << "This line will not be executed" << std::endl;
+
     } catch (const std::exception& e) {
         std::cout << "Caught exception: " << e.what() << std::endl;
     }
