@@ -43,11 +43,34 @@ public:
      */
     event_loop& get_event_loop();
     
+    /**
+     * @brief Wait for all tasks to complete
+     */
+    void wait_for_completion();
+    
+    /**
+     * @brief Check if all tasks are completed
+     */
+    bool is_completed();
+    
+    /**
+     * @brief Notify that a task has started
+     */
+    void task_started();
+    
+    /**
+     * @brief Notify that a task has completed
+     */
+    void task_completed();
+    
 private:
     std::vector<std::thread> threads_;
     std::list<std::coroutine_handle<>> task_queue_;  // Use list to implement FIFO
     std::mutex queue_mutex_;
     std::atomic_bool running_;
+    std::atomic_int active_tasks_{0};
+    std::condition_variable completion_cv_;
+    std::mutex completion_mutex_;
     std::unique_ptr<event_loop> event_loop_;  ///< Event loop instance
 };
 

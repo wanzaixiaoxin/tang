@@ -2,6 +2,7 @@
 #include <iostream>
 #include <chrono>
 #include <condition_variable>
+#include <atomic>
 
 namespace tang {
 namespace runtime {
@@ -46,7 +47,18 @@ void scheduler::init() {
                 }
                 
                 if (handle) {
+                    task_started();
                     handle.resume();
+                    
+                    // Check if coroutine is done
+                    if (handle.done()) {
+                        // Do NOT destroy the coroutine here - task destructor will handle it
+                        task_completed();
+                    } else {
+                        // Re-schedule the coroutine if it's not done
+                        schedule(handle);
+                        task_completed(); // Count this execution as completed
+                    }
                 } else {
                     // Short sleep when no tasks to reduce CPU usage
                     std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -59,8 +71,13 @@ void scheduler::init() {
 void scheduler::run() {
     init();
     
-    // Run for a while to let tasks complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    // Wait for all tasks to complete with timeout
+    std::unique_lock<std::mutex> lock(completion_mutex_);
+    if (!completion_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
+        return active_tasks_.load() == 0 && task_queue_.empty();
+    })) {
+        std::cerr << "Warning: Tasks did not complete within timeout" << std::endl;
+    }
     
     stop();
 }
@@ -98,12 +115,35 @@ void scheduler::schedule(std::coroutine_handle<> handle) {
     task_queue_.push_back(handle);
 }
 
+void scheduler::wait_for_completion() {
+    std::unique_lock<std::mutex> lock(completion_mutex_);
+    completion_cv_.wait(lock, [this]() {
+        return active_tasks_.load() == 0 && task_queue_.empty();
+    });
+}
+
+bool scheduler::is_completed() {
+    return active_tasks_.load() == 0 && task_queue_.empty();
+}
+
+void scheduler::task_started() {
+    active_tasks_++;
+}
+
+void scheduler::task_completed() {
+    active_tasks_--;
+    if (active_tasks_.load() == 0) {
+        std::lock_guard<std::mutex> lock(completion_mutex_);
+        completion_cv_.notify_all();
+    }
+}
+
 // Global function implementations
 
 void init(size_t num_threads) {
     if (!g_scheduler) {
         g_scheduler = new scheduler(num_threads);
-        g_scheduler->init();
+        // Do NOT call init() here - it will be called by run()
     }
 }
 
