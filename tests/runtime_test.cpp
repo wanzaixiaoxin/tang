@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 
+using namespace tang;
 /**
  * Test single-threaded runtime initialization
  */
@@ -50,7 +51,7 @@ TEST(runtime_yield) {
     
     tang::go([&order, &task1_order]() {
         task1_order = ++order;
-        ::tang::runtime::yield();
+        runtime::yield();
         task1_order = ++order;
     });
     
@@ -76,7 +77,7 @@ TEST(runtime_sleep_ms) {
     auto start = std::chrono::steady_clock::now();
     
     tang::go([]() {
-        ::tang::runtime::sleep_ms(50);
+        runtime::sleep_ms(50);
     });
     
     runtime.run();
@@ -139,7 +140,7 @@ TEST(runtime_mixed_operations) {
     }
     
     tang::go([&sleep_completed]() {
-        ::tang::runtime::sleep_ms(30);
+        runtime::sleep_ms(30);
         sleep_completed = true;
     });
     

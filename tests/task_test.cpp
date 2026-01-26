@@ -4,6 +4,7 @@
 #include <thread>
 #include <functional>
 
+using namespace tang;
 /**
  * Test basic coroutine creation and execution
  */
@@ -110,7 +111,7 @@ TEST(task_with_sleep) {
     // Create coroutine with sleep
     tang::go([&executed]() {
         // Sleep 50 milliseconds
-        ::tang::runtime::sleep_ms(50);
+        runtime::sleep_ms(50);
         executed = true;
     });
     

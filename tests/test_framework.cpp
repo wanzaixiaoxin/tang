@@ -14,19 +14,19 @@ int run_tests(int argc, char* argv[]) {
     (void)argc; 
     (void)argv; 
     try {
-        LOG_INFO(tang::logger::test) << "Starting test";
+        LOG_INFO(logger::test) << "Starting test";
         
         bool success = get_test_framework().run_all();
         
         if (success) {
-            LOG_INFO(tang::logger::test) << "All tests completed successfully!";
+            LOG_INFO(logger::test) << "All tests completed successfully!";
             return 0;
         } else {
-            LOG_ERROR(tang::logger::test) << "Some tests failed!";
+            LOG_ERROR(logger::test) << "Some tests failed!";
             return 1;
         }
     } catch (const std::exception& e) {
-        LOG_ERROR(tang::logger::test) << "Test framework error: " << e.what();
+        LOG_ERROR(logger::test) << "Test framework error: " << e.what();
         return 1;
     }
 }

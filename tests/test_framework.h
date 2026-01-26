@@ -62,24 +62,24 @@ private:
         auto start_time = std::chrono::high_resolution_clock::now();
         
         try {
-            LOG_INFO(tang::logger::test) << "***************** Running test: " + test_case.name + " *****************";
+            LOG_INFO(logger::test) << "***************** Running test: " + test_case.name + " *****************";
             test_case.function();
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = end_time - start_time;
             
-            LOG_INFO(tang::logger::test) << "Test passed: " + test_case.name;
+            LOG_INFO(logger::test) << "Test passed: " + test_case.name;
             return TestResult(test_case.name, true, "", duration);
         } catch (const std::exception& e) {
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = end_time - start_time;
             
-            LOG_DEBUG(tang::logger::test) << "Test failed: " + std::string(e.what());
+            LOG_DEBUG(logger::test) << "Test failed: " + std::string(e.what());
             return TestResult(test_case.name, false, "", duration);
         } catch (...) {
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = end_time - start_time;
             
-            LOG_DEBUG(tang::logger::test) << "Test failed with unknown exception";
+            LOG_DEBUG(logger::test) << "Test failed with unknown exception";
             return TestResult(test_case.name, false, "", duration);
         }
     }
@@ -96,7 +96,7 @@ public:
      * Run all test cases
      */
     bool run_all() {
-        LOG_INFO(tang::logger::test) << "Starting test suite with " << test_cases_.size() << " tests";
+        LOG_INFO(logger::test) << "Starting test suite with " << test_cases_.size() << " tests";
         
         passed_count_ = 0;
         failed_count_ = 0;
@@ -120,34 +120,34 @@ public:
      * Report test results
      */
     bool report_results() {
-        LOG_INFO(tang::logger::test) << "\n=== Test Results ===";
-        LOG_INFO(tang::logger::test) << "Total tests: " << test_cases_.size();
-        LOG_INFO(tang::logger::test) << "Passed: " << passed_count_;
-        LOG_INFO(tang::logger::test) << "Failed: " << failed_count_;
+        LOG_INFO(logger::test) << "\n=== Test Results ===";
+        LOG_INFO(logger::test) << "Total tests: " << test_cases_.size();
+        LOG_INFO(logger::test) << "Passed: " << passed_count_;
+        LOG_INFO(logger::test) << "Failed: " << failed_count_;
         
         if (failed_count_ > 0) {
-            LOG_INFO(tang::logger::test) << "\nFailed tests:";
+            LOG_INFO(logger::test) << "\nFailed tests:";
             for (const auto& result : results_) {
                 if (!result.passed) {
-                    LOG_ERROR(tang::logger::test) << "- " + result.name + ": " + result.error_message;
+                    LOG_ERROR(logger::test) << "- " + result.name + ": " + result.error_message;
                 }
             }
         }
         
-        LOG_INFO(tang::logger::test) << "\nDetailed results:";
+        LOG_INFO(logger::test) << "\nDetailed results:";
         for (const auto& result : results_) {
             std::string status = result.passed ? "PASS" : "FAIL";
             std::stringstream duration_ss;
             duration_ss << std::fixed << std::setprecision(3) << result.duration.count() << "s";
             
-            LOG_DEBUG(tang::logger::test) << "[" + status + "] " + result.name + " (" + duration_ss.str() + ")";
+            LOG_DEBUG(logger::test) << "[" + status + "] " + result.name + " (" + duration_ss.str() + ")";
         }
         
         bool all_passed = (failed_count_ == 0);
         if (all_passed) {
-            LOG_DEBUG(tang::logger::test) << "\nAll tests passed!";
+            LOG_DEBUG(logger::test) << "\nAll tests passed!";
         } else {
-            LOG_ERROR(tang::logger::test) << "\nSome tests failed!";    
+            LOG_ERROR(logger::test) << "\nSome tests failed!";    
         }
         
         return all_passed;

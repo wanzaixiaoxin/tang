@@ -34,7 +34,7 @@ public:
     RuntimeScope(size_t threads = 2) : thread_count_(threads), has_run_(false) {
         // Only initialize runtime if this is the first instance
         if (instance_count_++ == 0) {
-            LOG_INFO(tang::logger::test) << "Initializing runtime with " << thread_count_ << " threads";
+            LOG_INFO(logger::test) << "Initializing runtime with " << thread_count_ << " threads";
             runtime::init(thread_count_);
             runtime_initialized_ = true;
             runtime_running_ = true;
@@ -49,7 +49,7 @@ public:
     ~RuntimeScope() {
         // Only stop runtime when the last instance is destroyed
         if (--instance_count_ == 0) {
-            LOG_INFO(tang::logger::test) << "Stopping runtime";
+            LOG_INFO(logger::test) << "Stopping runtime";
             runtime::stop();
             runtime_initialized_ = false;
             runtime_running_ = false;
@@ -68,23 +68,23 @@ public:
      */
     void run() {
         if (has_run_) {
-            LOG_WARN(tang::logger::test) << "RuntimeScope::run() called multiple times, ignoring subsequent calls";
+            LOG_WARN(logger::test) << "RuntimeScope::run() called multiple times, ignoring subsequent calls";
             return;
         }
         
         if (!runtime_running_) {
-            LOG_WARN(tang::logger::test) << "Runtime is not running, cannot execute run()";
+            LOG_WARN(logger::test) << "Runtime is not running, cannot execute run()";
             return;
         }
         
         has_run_ = true;
         
-        LOG_INFO(tang::logger::runtime) << "Starting scheduler run";
+        LOG_INFO(logger::runtime) << "Starting scheduler run";
         
         // Run scheduler once - coroutines will properly suspend/resume via awaiters
         runtime::run();
         
-        LOG_INFO(tang::logger::runtime) << "Scheduler run completed";
+        LOG_INFO(logger::runtime) << "Scheduler run completed";
     }
     
     /**

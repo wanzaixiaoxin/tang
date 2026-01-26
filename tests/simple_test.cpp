@@ -3,6 +3,7 @@
 #include <atomic>
 #include <thread>
 
+using namespace tang;
 /**
  * Test basic coroutine functionality
  */
@@ -11,17 +12,17 @@ TEST2(basic_coroutine,true) {
 
     std::atomic_bool executed = false;
 
-    LOG_INFO(tang::logger::test) << "Before creating coroutine, executed = " << executed.load();
+    LOG_INFO(logger::test) << "Before creating coroutine, executed = " << executed.load();
 
     try {
         // Create a simple coroutine
         tang::go([&executed]() {
-            LOG_INFO(tang::logger::test) << "Inside coroutine, setting executed to true";
+            LOG_INFO(logger::test) << "Inside coroutine, setting executed to true";
             executed = true;
-            LOG_INFO(tang::logger::test) << "Inside coroutine, executed = " << executed.load();
+            LOG_INFO(logger::test) << "Inside coroutine, executed = " << executed.load();
         });
 
-        LOG_INFO(tang::logger::test) << "After creating coroutine, executed = " << executed.load();
+        LOG_INFO(logger::test) << "After creating coroutine, executed = " << executed.load();
 
         // Give some time for coroutine to be scheduled
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -29,15 +30,15 @@ TEST2(basic_coroutine,true) {
         // Run scheduler
         runtime.run();
 
-        LOG_INFO(tang::logger::test) << "After runtime.run(), executed = " << executed.load();
+        LOG_INFO(logger::test) << "After runtime.run(), executed = " << executed.load();
 
         // Verify coroutine execution
         ASSERT_TRUE(executed.load());
     } catch (const std::exception& e) {
-        LOG_ERROR(tang::logger::test) << "Exception in basic_coroutine: " << e.what();   
+        LOG_ERROR(logger::test) << "Exception in basic_coroutine: " << e.what();   
         throw;
     } catch (...) {
-        LOG_ERROR(tang::logger::test) << "Unknown exception in basic_coroutine";
+        LOG_ERROR(logger::test) << "Unknown exception in basic_coroutine";
         throw;
     }
 }
@@ -54,25 +55,25 @@ TEST2(basic_channel_operation,true) {
     
     // Create sender coroutine - like Go goroutine
     tang::go([&ch]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Inside sender coroutine";
+        LOG_INFO(logger::test) << "Inside sender coroutine";
         co_await ch.send(42);  // Block until receiver is ready (Go-like behavior)
-        LOG_INFO(tang::logger::test) << "Sent value: 42";
+        LOG_INFO(logger::test) << "Sent value: 42";
         co_return;
     });
     
     // Create receiver coroutine - like Go goroutine
     tang::go([&ch, &received]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Inside receiver coroutine";
+        LOG_INFO(logger::test) << "Inside receiver coroutine";
         co_await ch.recv(received);  // Block until data is available (Go-like behavior)
-        LOG_INFO(tang::logger::test) << "Received value: " << received;   
+        LOG_INFO(logger::test) << "Received value: " << received;   
         co_return;
     });
     
     // Run scheduler once to process both coroutines - like Go runtime
-    LOG_INFO(tang::logger::test) << "Starting scheduler for sender and receiver";
+    LOG_INFO(logger::test) << "Starting scheduler for sender and receiver";
     runtime.run();
     
-    LOG_INFO(tang::logger::test) << "After runtime.run(), received = " << received;
+    LOG_INFO(logger::test) << "After runtime.run(), received = " << received;
     // Verify result
     ASSERT_EQUAL(42, received);
 }
@@ -90,41 +91,41 @@ TEST2(channel_multiple_operations,true) {
     
     // Send all values first
     for (int i = 0; i < 5; ++i) {
-        LOG_DEBUG(tang::logger::test) << "Sending value: " << i;
+        LOG_DEBUG(logger::test) << "Sending value: " << i;
         bool sent = ch.try_send(i);
         ASSERT_TRUE(sent);
-        LOG_DEBUG(tang::logger::test) << "Send completed for value: " << i;
+        LOG_DEBUG(logger::test) << "Send completed for value: " << i;
     }
     
-    LOG_INFO(tang::logger::test) << "Sent 5 values to buffer";
+    LOG_INFO(logger::test) << "Sent 5 values to buffer";
     
     // Create receiver coroutine to receive all values
     tang::go([&ch, &received_count]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Inside receiver coroutine";
+        LOG_INFO(logger::test) << "Inside receiver coroutine";
         
         for (int i = 0; i < 5; ++i) {
             int value;
             bool result = co_await ch.recv(value);
-            LOG_INFO(tang::logger::test) << "Received value: " << value << ", result: " << result;
+            LOG_INFO(logger::test) << "Received value: " << value << ", result: " << result;
             
             if (result) {
                 received_count++;
-                LOG_INFO(tang::logger::test) << "received_count: " << received_count.load();
+                LOG_INFO(logger::test) << "received_count: " << received_count.load();
             } else {
-                LOG_ERROR(tang::logger::test) << "Receive failed at iteration " << i;
+                LOG_ERROR(logger::test) << "Receive failed at iteration " << i;
                 break;
             }
         }
         
-        LOG_INFO(tang::logger::test) << "Receiver completed: Received " << received_count.load() << " values";
+        LOG_INFO(logger::test) << "Receiver completed: Received " << received_count.load() << " values";
         co_return;
     });
     
     // Run scheduler to process receiver
-    LOG_INFO(tang::logger::test) << "Starting scheduler for receiver";
+    LOG_INFO(logger::test) << "Starting scheduler for receiver";
     runtime.run();
     
-    LOG_INFO(tang::logger::test) << "After runtime.run(), received_count = " << received_count.load();
+    LOG_INFO(logger::test) << "After runtime.run(), received_count = " << received_count.load();
     
     // Verify result
     ASSERT_EQUAL(5, received_count.load());
@@ -144,7 +145,7 @@ TEST2(channel_closure,true) {
     // Test try_recv on closed channel
     int value;
     bool result = ch.try_recv(value);
-    LOG_INFO(tang::logger::test) << "try_recv on closed channel result: " << result;
+    LOG_INFO(logger::test) << "try_recv on closed channel result: " << result;
     
     // Should return false when channel is closed
     ASSERT_FALSE(result);
@@ -165,7 +166,7 @@ TEST2(coroutine_with_sleep,true) {
     // Create coroutine with sleep
     tang::go([&executed]() {
         // Sleep 100 milliseconds
-        ::tang::runtime::sleep_ms(100);
+        runtime::sleep_ms(100);
         executed = true;
     });
     
@@ -197,18 +198,18 @@ TEST2(multiple_producers_single_consumer,true) {
     for (int producer_id = 0; producer_id < num_producers; ++producer_id) {
         for (int i = 0; i < values_per_producer; ++i) {
             int value = producer_id * 100 + i;
-            LOG_DEBUG(tang::logger::test) << "Sending value: " << value;
+            LOG_DEBUG(logger::test) << "Sending value: " << value;
             bool sent = ch.try_send(value);
             ASSERT_TRUE(sent);
-            LOG_DEBUG(tang::logger::test) << "Send completed for value: " << value;
+            LOG_DEBUG(logger::test) << "Send completed for value: " << value;
         }
     }
     
-    LOG_INFO(tang::logger::test) << "All " << (num_producers * values_per_producer) << " values sent to buffer";
+    LOG_INFO(logger::test) << "All " << (num_producers * values_per_producer) << " values sent to buffer";
     
     // Create single consumer coroutine
     tang::go([&ch, &received_count, num_producers, values_per_producer]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Consumer started";
+        LOG_INFO(logger::test) << "Consumer started";
         
         for (int i = 0; i < num_producers * values_per_producer; ++i) {
             int value;
@@ -216,14 +217,14 @@ TEST2(multiple_producers_single_consumer,true) {
             
             if (result) {
                 received_count++;
-                LOG_DEBUG(tang::logger::test) << "Consumer received: " << value << ", count: " << received_count.load();
+                LOG_DEBUG(logger::test) << "Consumer received: " << value << ", count: " << received_count.load();
             } else {
-                LOG_ERROR(tang::logger::test) << "Receive failed at iteration " << i;
+                LOG_ERROR(logger::test) << "Receive failed at iteration " << i;
                 break;
             }
         }
         
-        LOG_INFO(tang::logger::test) << "Consumer finished, received: " << received_count.load() << " values";
+        LOG_INFO(logger::test) << "Consumer finished, received: " << received_count.load() << " values";
         co_return;
     });
     
@@ -258,19 +259,19 @@ TEST2(channel_complex_data,true) {
     
     // Create sender coroutine
     tang::go([&ch]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Complex data sender started";
+        LOG_INFO(logger::test) << "Complex data sender started";
         
         co_await ch.send(ComplexData(1, "test1", 1.5));
         co_await ch.send(ComplexData(2, "test2", 2.5));
         co_await ch.send(ComplexData(3, "test3", 3.5));
         
-        LOG_INFO(tang::logger::test) << "Complex data sender finished";
+        LOG_INFO(logger::test) << "Complex data sender finished";
         co_return;
     });
     
     // Create receiver coroutine
     tang::go([&ch, &received_count, &received_data]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Complex data receiver started";
+        LOG_INFO(logger::test) << "Complex data receiver started";
         
         for (int i = 0; i < 3; ++i) {
             ComplexData data(-1, "", 0.0);
@@ -279,15 +280,15 @@ TEST2(channel_complex_data,true) {
             if (result) {
                 received_count++;
                 received_data = data; // Store last received data
-                LOG_DEBUG(tang::logger::test) << "Received complex data: id=" << data.id 
+                LOG_DEBUG(logger::test) << "Received complex data: id=" << data.id 
                           << ", name=" << data.name << ", value=" << data.value;
             } else {
-                LOG_ERROR(tang::logger::test) << "Complex data receive failed";
+                LOG_ERROR(logger::test) << "Complex data receive failed";
                 break;
             }
         }
         
-        LOG_INFO(tang::logger::test) << "Complex data receiver finished";
+        LOG_INFO(logger::test) << "Complex data receiver finished";
         co_return;
     });
     
@@ -310,7 +311,7 @@ TEST2(channel_timeout_behavior,true) {
     
     // Test: Send a value and then receive it
     tang::go([&ch, &normal_receive_occurred]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Normal receive test started";
+        LOG_INFO(logger::test) << "Normal receive test started";
         
         // Send a value first
         co_await ch.send(42);
@@ -321,7 +322,7 @@ TEST2(channel_timeout_behavior,true) {
         
         if (result && value == 42) {
             normal_receive_occurred = true;
-            LOG_INFO(tang::logger::test) << "Normal receive successful";
+            LOG_INFO(logger::test) << "Normal receive successful";
         }
         
         co_return;
@@ -346,7 +347,7 @@ TEST2(channel_exception_handling,true) {
     
     // Create coroutine that throws exception
     tang::go([&ch, &exception_handled]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Exception test coroutine started";
+        LOG_INFO(logger::test) << "Exception test coroutine started";
         
         try {
             // This should work normally
@@ -356,7 +357,7 @@ TEST2(channel_exception_handling,true) {
             throw std::runtime_error("Test exception");
             
         } catch (const std::exception& e) {
-            LOG_INFO(tang::logger::test) << "Exception caught: " << e.what();
+            LOG_INFO(logger::test) << "Exception caught: " << e.what();
             exception_handled = true;
         }
         
@@ -365,10 +366,10 @@ TEST2(channel_exception_handling,true) {
     
     // Create normal coroutine to test channel still works
     tang::go([&ch, &normal_operation_ok]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Normal operation test started";
+        LOG_INFO(logger::test) << "Normal operation test started";
         
         // Wait for the exception coroutine to finish
-        ::tang::runtime::sleep_ms(100);
+        runtime::sleep_ms(100);
         
         // Channel should still work after exception
         co_await ch.send(200);
@@ -379,7 +380,7 @@ TEST2(channel_exception_handling,true) {
         
         if (result1 && result2 && value1 == 100 && value2 == 200) {
             normal_operation_ok = true;
-            LOG_INFO(tang::logger::test) << "Normal operation verified";
+            LOG_INFO(logger::test) << "Normal operation verified";
         }
         
         co_return;
@@ -408,22 +409,22 @@ TEST2(channel_performance_test,true) {
     
     // Create sender coroutine - true concurrent operation
     tang::go([&ch, &send_count, NUM_OPERATIONS]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Performance sender started";
+        LOG_INFO(logger::test) << "Performance sender started";
         
         for (int i = 0; i < NUM_OPERATIONS; ++i) {
-            LOG_DEBUG(tang::logger::test) << "Sender sending value: " << i;
+            LOG_DEBUG(logger::test) << "Sender sending value: " << i;
             co_await ch.send(i);
             send_count++;
-            LOG_DEBUG(tang::logger::test) << "Sender sent value: " << i << ", count: " << send_count.load();
+            LOG_DEBUG(logger::test) << "Sender sent value: " << i << ", count: " << send_count.load();
         }
         
-        LOG_INFO(tang::logger::test) << "Performance sender finished";
+        LOG_INFO(logger::test) << "Performance sender finished";
         co_return;
     });
     
     // Create receiver coroutine - true concurrent operation
     tang::go([&ch, &receive_count, NUM_OPERATIONS]() -> tang::task<void> {
-        LOG_INFO(tang::logger::test) << "Performance receiver started";
+        LOG_INFO(logger::test) << "Performance receiver started";
         
         for (int i = 0; i < NUM_OPERATIONS; ++i) {
             int value;
@@ -431,14 +432,14 @@ TEST2(channel_performance_test,true) {
             
             if (result) {
                 receive_count++;
-                LOG_DEBUG(tang::logger::test) << "Receiver received value: " << value << ", count: " << receive_count.load();
+                LOG_DEBUG(logger::test) << "Receiver received value: " << value << ", count: " << receive_count.load();
             } else {
-                LOG_ERROR(tang::logger::test) << "Performance test receive failed";
+                LOG_ERROR(logger::test) << "Performance test receive failed";
                 break;
             }
         }
         
-        LOG_INFO(tang::logger::test) << "Performance receiver finished, received: " << receive_count.load() << " values";
+        LOG_INFO(logger::test) << "Performance receiver finished, received: " << receive_count.load() << " values";
         co_return;
     });
     
@@ -448,7 +449,7 @@ TEST2(channel_performance_test,true) {
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     
-    LOG_INFO(tang::logger::test) << "Performance test completed: " << NUM_OPERATIONS 
+    LOG_INFO(logger::test) << "Performance test completed: " << NUM_OPERATIONS 
               << " operations in " << duration.count() << "ms";
     
     // Verify all operations completed
@@ -463,6 +464,6 @@ TEST2(channel_performance_test,true) {
  * Main function using test framework
  */
 int main(int argc, char* argv[]) {
-    tang::logger::init();
+    logger::init();
     return tang::test::run_tests(argc, argv);
 }
