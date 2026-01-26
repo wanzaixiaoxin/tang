@@ -9,6 +9,7 @@
 #include <memory>
 #include <chrono>
 #include <list>
+#include <condition_variable>
 #include <tang/event_loop.h>
 
 namespace tang {
