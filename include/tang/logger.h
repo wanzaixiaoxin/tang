@@ -13,6 +13,7 @@ namespace tang {
  * Log level enumeration
  */
 enum class LogLevel {
+    TRACE_LEVEL,
     DEBUG_LEVEL,
     INFO_LEVEL,
     WARN_LEVEL,
@@ -57,6 +58,7 @@ private:
      */
     static std::string get_level_string(LogLevel level) {
         switch (level) {
+            case LogLevel::TRACE_LEVEL: return "TRACE";
             case LogLevel::DEBUG_LEVEL: return "DEBUG";
             case LogLevel::INFO_LEVEL: return "INFO";
             case LogLevel::WARN_LEVEL: return "WARN";
@@ -114,6 +116,15 @@ public:
     Logger(const std::string& module_name, LogLevel level = LogLevel::INFO_LEVEL)
         : module_name_(module_name), level_(level) {}
     
+    /**
+     * Log a trace message
+     */
+    void trace(const std::string& message, const std::string& file, int line) {
+        if (should_log(LogLevel::TRACE_LEVEL)) {
+            output_message(LogLevel::TRACE_LEVEL, format_message(LogLevel::TRACE_LEVEL, message, file, line));
+        }
+    }
+
     /**
      * Log a debug message
      */
@@ -177,6 +188,13 @@ public:
             return *this;
         }
     };
+   
+        /**
+     * Create a debug log stream
+     */
+    LogStream trace_stream(const std::string& file, int line) {
+        return LogStream(*this, LogLevel::TRACE_LEVEL, file, line);
+    }
     
     /**
      * Create a debug log stream
@@ -243,18 +261,19 @@ namespace logger {
 
 
 // Stream-based logging macros
+#define LOG_TRACE(logger) logger.trace_stream(__FILE__, __LINE__)
 #define LOG_DEBUG(logger) logger.debug_stream(__FILE__, __LINE__)
 #define LOG_INFO(logger) logger.info_stream(__FILE__, __LINE__)
 #define LOG_WARN(logger) logger.warn_stream(__FILE__, __LINE__)
 #define LOG_ERROR(logger) logger.error_stream(__FILE__, __LINE__)
 
-#define LOG_DEBUG_FUNC(logger) logger.debug(std::string(__FUNCTION__) + " called", __FILE__, __LINE__)
-#define LOG_DEBUG_FUNC_WITH_HANDLE(logger, handle) \
+#define LOG_TRACE_FUNC(logger) logger.trace(std::string(__FUNCTION__) + " called", __FILE__, __LINE__)
+#define LOG_TRACE_FUNC_HANDLE(logger, handle) \
     do { \
         std::stringstream ss; \
         ss << __FUNCTION__ << " - handle: " << (handle ? "valid" : "null") \
            << ", done: " << (handle ? (handle.done() ? "true" : "false") : "N/A"); \
-        logger.debug(ss.str(), __FILE__, __LINE__); \
+        logger.trace(ss.str(), __FILE__, __LINE__); \
     } while(0)
 
 } // namespace tang

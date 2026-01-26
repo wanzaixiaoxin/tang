@@ -7,11 +7,11 @@ std::mutex Logger::log_mutex_;
 
 // Global logger instances
 namespace logger {
-    Logger runtime("RUNTIME", LogLevel::DEBUG_LEVEL);
-    Logger channel("CHANNEL", LogLevel::DEBUG_LEVEL);
-    Logger task("TASK", LogLevel::DEBUG_LEVEL);
-    Logger test("TEST", LogLevel::DEBUG_LEVEL);
-    Logger example("EXAMPLE", LogLevel::DEBUG_LEVEL);
+    Logger runtime("RUNTIME", LogLevel::TRACE_LEVEL);
+    Logger channel("CHANNEL", LogLevel::TRACE_LEVEL);
+    Logger task("TASK", LogLevel::TRACE_LEVEL);
+    Logger test("TEST", LogLevel::TRACE_LEVEL);
+    Logger example("EXAMPLE", LogLevel::TRACE_LEVEL);
     
     /**
      * Initialize global loggers

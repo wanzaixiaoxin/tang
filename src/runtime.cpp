@@ -15,8 +15,8 @@ namespace runtime {
 scheduler* g_scheduler = nullptr;
 
 scheduler::scheduler(size_t num_threads) : running_(false) {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
-    LOG_DEBUG(tang::logger::runtime) << "Creating scheduler with " << num_threads << " threads";
+    LOG_TRACE_FUNC(tang::logger::runtime);
+    LOG_TRACE(tang::logger::runtime) << "Creating scheduler with " << num_threads << " threads";
     
     if (num_threads == 0) {
         num_threads = std::thread::hardware_concurrency();
@@ -24,12 +24,12 @@ scheduler::scheduler(size_t num_threads) : running_(false) {
             num_threads = 1;  // Use single thread by default for simplicity
         }
     }
-    LOG_DEBUG(tang::logger::runtime) << "Final thread count: " << num_threads;
+    LOG_TRACE(tang::logger::runtime) << "Final thread count: " << num_threads;
     threads_.reserve(num_threads);
     
     // Initialize event loop
     event_loop_ = std::make_unique<event_loop>();
-    LOG_DEBUG(tang::logger::runtime) << "Event loop initialized";
+    LOG_TRACE(tang::logger::runtime) << "Event loop initialized";
 }
 
 scheduler::~scheduler() {
@@ -37,94 +37,101 @@ scheduler::~scheduler() {
 }
 
 void scheduler::init() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (running_.exchange(true)) {
-        LOG_DEBUG(tang::logger::runtime) << "Scheduler already running, skipping init";
+        LOG_TRACE(tang::logger::runtime) << "Scheduler already running, skipping init";
         return;
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Starting " << threads_.capacity() << " worker threads";
+    LOG_TRACE(tang::logger::runtime) << "Starting " << threads_.capacity() << " worker threads";
     
     for (size_t i = 0; i < threads_.capacity(); ++i) {
-        threads_.emplace_back([this, i]() {
-            LOG_DEBUG(tang::logger::runtime) << "Worker thread " << i << " started";
-            
-            while (running_.load()) {
-                std::coroutine_handle<> handle;
+        try {
+            threads_.emplace_back([this, i]() {
+                LOG_TRACE(tang::logger::runtime) << "Worker thread " << i << " started";
                 
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex_);
-                    if (!task_queue_.empty()) {
-                        // Use FIFO, get task from front of queue
-                        handle = task_queue_.front();
-                        task_queue_.pop_front();
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " got task from queue, queue size: " << task_queue_.size();
-                    }
-                }
-                
-                if (handle) {
-                    LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::runtime, handle);
+                while (running_.load()) {
+                    std::coroutine_handle<> handle;
                     
-                    // Check if coroutine is already done before resuming
-                    if (handle.done()) {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " coroutine already done, skipping resume";
-                        task_completed(); // Task already completed
-                        continue;
+                    {
+                        std::lock_guard<std::mutex> lock(queue_mutex_);
+                        if (!task_queue_.empty()) {
+                            // Use FIFO, get task from front of queue
+                            handle = task_queue_.front();
+                            task_queue_.pop_front();
+                            LOG_TRACE(tang::logger::runtime) << "Thread " << i << " got task from queue, queue size: " << task_queue_.size();
+                        }
                     }
                     
-                    // Check if coroutine handle is valid
-                    if (!handle.address()) {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " invalid coroutine handle, skipping resume";
-                        task_completed(); // Invalid task, consider completed
-                        continue;
-                    }
-                    
-                    LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " resuming coroutine";
-                    
-                    try {
-                        handle.resume();
-                    } catch (const std::exception& e) {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " coroutine resume failed: " << e.what();
-                        task_completed(); // Task failed, consider completed
-                        continue;
-                    } catch (...) {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " coroutine resume failed with unknown exception";
-                        task_completed(); // Task failed, consider completed
-                        continue;
-                    }
-                    
-                    // Check if coroutine is done
-                    if (handle.done()) {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " coroutine completed";
-                        task_completed();
+                    if (handle) {
+                        LOG_TRACE_FUNC_HANDLE(tang::logger::runtime, handle);
+                        
+                        // Check if coroutine is already done before resuming
+                        if (handle.done()) {
+                            LOG_TRACE(tang::logger::runtime) << "Thread " << i << " coroutine already done, skipping resume";
+                            task_completed(); // Task already completed
+                            continue;
+                        }
+                        
+                        // Check if coroutine handle is valid
+                        if (!handle.address()) {
+                            LOG_TRACE(tang::logger::runtime) << "Thread " << i << " invalid coroutine handle, skipping resume";
+                            task_completed(); // Invalid task, consider completed
+                            continue;
+                        }
+                        
+                        LOG_TRACE(tang::logger::runtime) << "Thread " << i << " resuming coroutine";
+                        
+                        try {
+                            handle.resume();
+                        } catch (const std::exception& e) {
+                            LOG_ERROR(tang::logger::runtime) << "Thread " << i << " coroutine resume failed: " << e.what();
+                            task_completed(); // Task failed, consider completed
+                            continue;
+                        } catch (...) {
+                            LOG_ERROR(tang::logger::runtime) << "Thread " << i << " coroutine resume failed with unknown exception";
+                            task_completed(); // Task failed, consider completed
+                            continue;
+                        }
+                        
+                        // Check if coroutine is done
+                        if (handle.done()) {
+                            LOG_TRACE(tang::logger::runtime) << "Thread " << i << " coroutine completed";
+                            task_completed();
+                        } else {
+                            LOG_TRACE(tang::logger::runtime) << "Thread " << i << " coroutine not done, re-scheduling";
+                            schedule(handle);
+                            task_started();
+                        }
                     } else {
-                        LOG_DEBUG(tang::logger::runtime) << "Thread " << i << " coroutine not done, re-scheduling";
-                        // Re-schedule the coroutine if it's not done
-                        // Don't call task_completed() since the task is still active
-                        schedule(handle);
-                        // Important: Also increment active tasks when re-scheduling
-                        task_started();
+                        // Short sleep when no tasks to reduce CPU usage
+                        std::this_thread::sleep_for(std::chrono::microseconds(100));
                     }
-                } else {
-                    // Short sleep when no tasks to reduce CPU usage
-                    std::this_thread::sleep_for(std::chrono::microseconds(100));
                 }
-            }
-            
-            LOG_DEBUG(tang::logger::runtime) << "Worker thread " << i << " stopped";
-        });
+                
+                LOG_TRACE(tang::logger::runtime) << "Worker thread " << i << " stopped";
+            });
+        } catch (const std::exception& e) {
+            LOG_ERROR(tang::logger::runtime) << "Failed to create worker thread " << i << ": " << e.what();
+            running_ = false;
+            throw;
+        } catch (...) {
+            LOG_ERROR(tang::logger::runtime) << "Failed to create worker thread " << i << " with unknown error";
+            running_ = false;
+            throw;
+        }
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "All worker threads started";
+    LOG_TRACE(tang::logger::runtime) << "All worker threads started";
 }
 
 void scheduler::run() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     init();
     
-    LOG_DEBUG(tang::logger::runtime) << "Processing tasks in main thread...";
+    LOG_TRACE(tang::logger::runtime) << "Processing tasks in main thread...";
     
     size_t iteration = 0;
     size_t last_active_tasks = 0;
@@ -136,7 +143,7 @@ void scheduler::run() {
     while (active_tasks_.load() > 0 || !task_queue_.empty()) {
         iteration++;
         if (iteration % 100 == 0) {
-            LOG_DEBUG(tang::logger::runtime) << "Scheduler iteration " << iteration << 
+            LOG_TRACE(tang::logger::runtime) << "Scheduler iteration " << iteration << 
                      ", active tasks: " << active_tasks_.load() << 
                      ", queue empty: " << (task_queue_.empty() ? "true" : "false");
         }
@@ -153,18 +160,18 @@ void scheduler::run() {
         }
         
         if (handle) {
-            LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::runtime, handle);
+            LOG_TRACE_FUNC_HANDLE(tang::logger::runtime, handle);
             
             // Check if coroutine is already done before resuming
             if (handle.done()) {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread coroutine already done, skipping resume";
+                LOG_TRACE(tang::logger::runtime) << "Main thread coroutine already done, skipping resume";
                 task_completed(); // Task was already completed
                 continue;
             }
             
             // Check if coroutine handle is valid
             if (!handle.address()) {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread invalid coroutine handle, skipping resume";
+                LOG_TRACE(tang::logger::runtime) << "Main thread invalid coroutine handle, skipping resume";
                 task_completed(); // Invalid task, consider completed
                 continue;
             }
@@ -173,23 +180,23 @@ void scheduler::run() {
 
             try {
                 handle.resume();
-                LOG_DEBUG(tang::logger::runtime) << "Main thread resume() returned";
+                LOG_TRACE(tang::logger::runtime) << "Main thread resume() returned";
             } catch (const std::exception& e) {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread coroutine resume failed: " << e.what();
+                LOG_ERROR(tang::logger::runtime) << "Main thread coroutine resume failed: " << e.what();
                 task_completed(); // Task failed, consider completed
                 continue;
             } catch (...) {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread coroutine resume failed with unknown exception";
+                LOG_ERROR(tang::logger::runtime) << "Main thread coroutine resume failed with unknown exception";
                 task_completed(); // Task failed, consider completed
                 continue;
             }
 
             // Check if coroutine is done
             if (handle.done()) {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread coroutine completed";
+                LOG_TRACE(tang::logger::runtime) << "Main thread coroutine completed";
                 task_completed();
             } else {
-                LOG_DEBUG(tang::logger::runtime) << "Main thread coroutine not done, re-scheduling";
+                LOG_TRACE(tang::logger::runtime) << "Main thread coroutine not done, re-scheduling";
                 // Re-schedule the coroutine if it's not done
                 // Don't call task_completed() since the task is still active
                 schedule(handle);
@@ -204,7 +211,7 @@ void scheduler::run() {
         if (current_active_tasks == last_active_tasks && task_queue_.empty()) {
             no_progress_count++;
             if (no_progress_count >= MAX_NO_PROGRESS_ITERATIONS) {
-                LOG_DEBUG(tang::logger::runtime) << "Scheduler detected no progress for " << MAX_NO_PROGRESS_ITERATIONS << " iterations, exiting";
+                LOG_TRACE(tang::logger::runtime) << "Scheduler detected no progress for " << MAX_NO_PROGRESS_ITERATIONS << " iterations, exiting";
                 break;
             }
         } else {
@@ -216,38 +223,50 @@ void scheduler::run() {
     // After main loop, wait a bit more to ensure all tasks have completed
     // This handles cases where tasks were just scheduled but not yet processed
     if (task_queue_.empty() && active_tasks_.load() == 0) {
-        LOG_DEBUG(tang::logger::runtime) << "Scheduler main loop completed, all tasks appear finished";
+        LOG_TRACE(tang::logger::runtime) << "Scheduler main loop completed, all tasks appear finished";
     } else {
-        LOG_DEBUG(tang::logger::runtime) << "Scheduler exiting with " << active_tasks_.load() << " active tasks and queue size: " << task_queue_.size();
+        LOG_TRACE(tang::logger::runtime) << "Scheduler exiting with " << active_tasks_.load() << " active tasks and queue size: " << task_queue_.size();
     }
     
     // Additional extended wait to allow any final processing
     // This is crucial for ensuring coroutines that were just resumed have time to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    LOG_TRACE(tang::logger::runtime) << "Starting extended wait for final processing...";
+    for (int i = 0; i < 20; ++i) {
+        if (task_queue_.empty() && active_tasks_.load() == 0) {
+            LOG_TRACE(tang::logger::runtime) << "All tasks completed during extended wait at iteration " << i;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     
-    LOG_DEBUG(tang::logger::runtime) << "Scheduler run completed - all tasks finished after " << iteration << " iterations";
+    // Final check
+    if (task_queue_.empty() && active_tasks_.load() == 0) {
+        LOG_TRACE(tang::logger::runtime) << "Scheduler run completed - all tasks finished after " << iteration << " iterations";
+    } else {
+        LOG_TRACE(tang::logger::runtime) << "Scheduler run completed with pending tasks - active: " << active_tasks_.load() << ", queue: " << task_queue_.size();
+    }
 }
 
 void scheduler::stop() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (!running_.exchange(false)) {
-        LOG_DEBUG(tang::logger::runtime) << "Scheduler already stopped, skipping stop";
+        LOG_TRACE(tang::logger::runtime) << "Scheduler already stopped, skipping stop";
         return;
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Stopping " << threads_.size() << " worker threads";
+    LOG_TRACE(tang::logger::runtime) << "Stopping " << threads_.size() << " worker threads";
     
     // Stop event loop
     if (event_loop_) {
-        LOG_DEBUG(tang::logger::runtime) << "Stopping event loop";
+        LOG_TRACE(tang::logger::runtime) << "Stopping event loop";
         event_loop_->stop();
     }
     
     // Wait for all threads to finish
     for (auto& thread : threads_) {
         if (thread.joinable()) {
-            LOG_DEBUG(tang::logger::runtime) << "Joining worker thread";
+            LOG_TRACE(tang::logger::runtime) << "Joining worker thread";
             thread.join();
         }
     }
@@ -255,11 +274,11 @@ void scheduler::stop() {
     
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
-        LOG_DEBUG(tang::logger::runtime) << "Clearing task queue, size: " << task_queue_.size();
+        LOG_TRACE(tang::logger::runtime) << "Clearing task queue, size: " << task_queue_.size();
         task_queue_.clear();
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Scheduler stopped successfully";
+    LOG_TRACE(tang::logger::runtime) << "Scheduler stopped successfully";
 }
 
 event_loop& scheduler::get_event_loop() {
@@ -267,18 +286,18 @@ event_loop& scheduler::get_event_loop() {
 }
 
 void scheduler::schedule(std::coroutine_handle<> handle) {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
-    LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::runtime, handle);
+    LOG_TRACE_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC_HANDLE(tang::logger::runtime, handle);
     
     // Check if coroutine handle is valid before scheduling
     if (!handle.address()) {
-        LOG_DEBUG(tang::logger::runtime) << "Invalid coroutine handle, not scheduling";
+        LOG_TRACE(tang::logger::runtime) << "Invalid coroutine handle, not scheduling";
         return;
     }
     
     // Check if coroutine is already done before scheduling
     if (handle.done()) {
-        LOG_DEBUG(tang::logger::runtime) << "Coroutine already done, not scheduling";
+        LOG_TRACE(tang::logger::runtime) << "Coroutine already done, not scheduling";
         return;
     }
     
@@ -286,7 +305,7 @@ void scheduler::schedule(std::coroutine_handle<> handle) {
     task_queue_.push_back(handle);
     // Only increment active tasks for newly scheduled tasks, not for re-scheduling
     // The active task count is managed in the worker threads when handling tasks
-    LOG_DEBUG(tang::logger::runtime) << "Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load();
+    LOG_TRACE(tang::logger::runtime) << "Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load();
 }
 
 void scheduler::wait_for_completion() {
@@ -299,112 +318,112 @@ bool scheduler::is_completed() {
 }
 
 void scheduler::task_started() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     active_tasks_++;
-    LOG_DEBUG(tang::logger::runtime) << "Task started, active tasks: " << active_tasks_.load();
+    LOG_TRACE(tang::logger::runtime) << "Task started, active tasks: " << active_tasks_.load();
 }
 
 void scheduler::task_completed() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     // Only decrement if active_tasks_ > 0 to avoid underflow
     if (active_tasks_.load() > 0) {
         active_tasks_--;
     }
-    LOG_DEBUG(tang::logger::runtime) << "Task completed, active tasks: " << active_tasks_.load();
+    LOG_TRACE(tang::logger::runtime) << "Task completed, active tasks: " << active_tasks_.load();
 }
 
 // Global function implementations
 
 void init(size_t num_threads) {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
-    LOG_DEBUG(tang::logger::runtime) << "Initializing runtime with " << num_threads << " threads";
+    LOG_TRACE_FUNC(tang::logger::runtime);
+    LOG_TRACE(tang::logger::runtime) << "Initializing runtime with " << num_threads << " threads";
     
     // Always create a new scheduler instance to ensure clean state
     if (g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "Deleting existing scheduler instance";
+        LOG_TRACE(tang::logger::runtime) << "Deleting existing scheduler instance";
         delete g_scheduler;
         g_scheduler = nullptr;
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Creating new scheduler instance";
+    LOG_TRACE(tang::logger::runtime) << "Creating new scheduler instance";
     g_scheduler = new scheduler(num_threads);
     // Do NOT call init() here - it will be called by run()
-    LOG_DEBUG(tang::logger::runtime) << "Scheduler instance created";
+    LOG_TRACE(tang::logger::runtime) << "Scheduler instance created";
 }
 
 void run() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (!g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "No scheduler found, initializing with default threads";
+        LOG_TRACE(tang::logger::runtime) << "No scheduler found, initializing with default threads";
         init(0);
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Starting scheduler run";
+    LOG_TRACE(tang::logger::runtime) << "Starting scheduler run";
     g_scheduler->run();
-    LOG_DEBUG(tang::logger::runtime) << "Scheduler run completed";
+    LOG_TRACE(tang::logger::runtime) << "Scheduler run completed";
 }
 
 void stop() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "Stopping and deleting scheduler";
+        LOG_TRACE(tang::logger::runtime) << "Stopping and deleting scheduler";
         g_scheduler->stop();
         delete g_scheduler;
         g_scheduler = nullptr;
-        LOG_DEBUG(tang::logger::runtime) << "Scheduler stopped and deleted";
+        LOG_TRACE(tang::logger::runtime) << "Scheduler stopped and deleted";
     } else {
-        LOG_DEBUG(tang::logger::runtime) << "No scheduler to stop";
+        LOG_TRACE(tang::logger::runtime) << "No scheduler to stop";
     }
 }
 
 void schedule(std::coroutine_handle<> handle) {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
-    LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::runtime, handle);
+    LOG_TRACE_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC_HANDLE(tang::logger::runtime, handle);
     
     // Check if coroutine handle is valid before scheduling
     if (!handle.address()) {
-        LOG_DEBUG(tang::logger::runtime) << "Invalid coroutine handle, not scheduling";
+        LOG_TRACE(tang::logger::runtime) << "Invalid coroutine handle, not scheduling";
         return;
     }
     
     // Check if coroutine is already done before scheduling
     if (handle.done()) {
-        LOG_DEBUG(tang::logger::runtime) << "Coroutine already done, not scheduling";
+        LOG_TRACE(tang::logger::runtime) << "Coroutine already done, not scheduling";
         return;
     }
     
     if (!g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "No scheduler found, initializing with default threads";
+        LOG_TRACE(tang::logger::runtime) << "No scheduler found, initializing with default threads";
         init(0);
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Scheduling coroutine";
+    LOG_TRACE(tang::logger::runtime) << "Scheduling coroutine";
     g_scheduler->schedule(handle);
 }
 
 void task_started() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (!g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "No scheduler found, initializing with default threads";
+        LOG_TRACE(tang::logger::runtime) << "No scheduler found, initializing with default threads";
         init(0);
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Notifying scheduler that task has started";
+    LOG_TRACE(tang::logger::runtime) << "Notifying scheduler that task has started";
     g_scheduler->task_started();
 }
 
 void task_completed() {
-    LOG_DEBUG_FUNC(tang::logger::runtime);
+    LOG_TRACE_FUNC(tang::logger::runtime);
     
     if (!g_scheduler) {
-        LOG_DEBUG(tang::logger::runtime) << "No scheduler found, initializing with default threads";
+        LOG_TRACE(tang::logger::runtime) << "No scheduler found, initializing with default threads";
         init(0);
     }
     
-    LOG_DEBUG(tang::logger::runtime) << "Notifying scheduler that task has completed";
+    LOG_TRACE(tang::logger::runtime) << "Notifying scheduler that task has completed";
     g_scheduler->task_completed();
 }
 

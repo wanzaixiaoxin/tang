@@ -40,7 +40,7 @@ public:
         }
         
         std::suspend_always final_suspend() noexcept {
-            LOG_DEBUG(tang::logger::task) << "final_suspend called";
+            LOG_TRACE(tang::logger::task) << "final_suspend called";
             return {};
         }
 
@@ -105,13 +105,13 @@ public:
     }
     
     void run() {
-        LOG_DEBUG_FUNC(tang::logger::task);
-        LOG_DEBUG_FUNC_WITH_HANDLE(tang::logger::task, handle);
+        LOG_TRACE_FUNC(tang::logger::task);
+        LOG_TRACE_FUNC_HANDLE(tang::logger::task, handle);
 
         if (handle) {
             // If coroutine is already completed (may happen with suspend_never), no need to schedule
             if (handle.done()) {
-                LOG_DEBUG(tang::logger::task) << "Task already done, skipping schedule";
+                LOG_TRACE(tang::logger::task) << "Task already done, skipping schedule";
                 // Notify scheduler that task has completed
                 runtime::task_completed();
                 // Destroy the handle since coroutine is complete
@@ -119,11 +119,11 @@ public:
                 handle = nullptr;
                 return;
             }
-            LOG_DEBUG(tang::logger::task) << "Scheduling task";
+            LOG_TRACE(tang::logger::task) << "Scheduling task";
             runtime::schedule(handle);
-            LOG_DEBUG(tang::logger::task) << "Task scheduled";
+            LOG_TRACE(tang::logger::task) << "Task scheduled";
         } else {
-            LOG_DEBUG(tang::logger::task) << "No handle to schedule";
+            LOG_TRACE(tang::logger::task) << "No handle to schedule";
         }
     }
     
@@ -249,8 +249,8 @@ struct go_helper<void> {
 
 template <typename F, typename... Args>
 auto go(F&& f, Args&&... args) {
-    LOG_DEBUG_FUNC(tang::logger::task);
-    LOG_DEBUG(tang::logger::task) << "Creating task from function";
+    LOG_TRACE_FUNC(tang::logger::task);
+    LOG_TRACE(tang::logger::task) << "Creating task from function";
     
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
@@ -258,10 +258,10 @@ auto go(F&& f, Args&&... args) {
     // Notify scheduler that a new task has started
     runtime::task_started();
     
-    LOG_DEBUG(tang::logger::task) << "Running task";
+    LOG_TRACE(tang::logger::task) << "Running task";
     task.run(); // Schedule task immediately
     
-    LOG_DEBUG(tang::logger::task) << "Task created and scheduled";
+    LOG_TRACE(tang::logger::task) << "Task created and scheduled";
     return task;
 }
 
