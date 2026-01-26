@@ -55,7 +55,15 @@ void scheduler::init() {
                     std::coroutine_handle<> handle;
                     
                     {
-                        std::lock_guard<std::mutex> lock(queue_mutex_);
+                        std::unique_lock<std::mutex> lock(queue_mutex_);
+                        // Wait for task or scheduler stop
+                        queue_cv_.wait(lock, [this]() { return !task_queue_.empty() || !running_.load(); });
+                        
+                        if (!running_.load()) {
+                            LOG_TRACE(logger::runtime) << "Thread " << i << " detected scheduler stopped while waiting, exiting";
+                            break;
+                        }
+                        
                         if (!task_queue_.empty()) {
                             // Use FIFO, get task from front of queue
                             handle = task_queue_.front();
@@ -110,9 +118,6 @@ void scheduler::init() {
                             schedule(handle);
                             // Don't call task_started() here - the task is still active
                         }
-                    } else {
-                        // Short sleep when no tasks to reduce CPU usage
-                        std::this_thread::sleep_for(std::chrono::microseconds(100));
                     }
                 }
                 
@@ -157,7 +162,12 @@ void scheduler::run() {
         std::coroutine_handle<> handle;
         
         {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
+            std::unique_lock<std::mutex> lock(queue_mutex_);
+            if (task_queue_.empty()) {
+                // Wait for a short time or until a new task arrives
+                queue_cv_.wait_for(lock, std::chrono::milliseconds(1), [this]() { return !task_queue_.empty(); });
+            }
+            
             if (!task_queue_.empty()) {
                 handle = task_queue_.front();
                 task_queue_.pop_front();
@@ -207,9 +217,6 @@ void scheduler::run() {
                 // Don't call task_completed() since the task is still active
                 schedule(handle);
             }
-        } else {
-            // Queue empty, sleep to avoid busy waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
         // Check for progress to avoid infinite loops
@@ -280,17 +287,27 @@ void scheduler::run() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
-    // Final check
-    if (task_queue_.empty() && active_tasks_.load() == 0) {
+    // Wait for a reasonable time for remaining tasks to complete
+    LOG_TRACE(logger::runtime) << "Scheduler main loop finished, waiting for remaining tasks to complete...";
+    
+    // Use a timeout to avoid infinite waiting
+    const std::chrono::seconds timeout(1);
+    bool all_completed = false;
+    
+    {   
+        std::unique_lock<std::mutex> lock(completion_mutex_);
+        all_completed = completion_cv_.wait_for(lock, timeout, [this]() {
+            return active_tasks_.load() == 0 && task_queue_.empty();
+        });
+    }
+    
+    if (all_completed) {
         LOG_TRACE(logger::runtime) << "Scheduler run completed - all tasks finished after " << iteration << " iterations";
     } else {
-        LOG_WARN(logger::runtime) << "Scheduler run completed with pending tasks - active: " << active_tasks_.load() << ", queue: " << task_queue_.size();
+        LOG_WARN(logger::runtime) << "Scheduler run completed with pending tasks after timeout - active: " << active_tasks_.load() << ", queue: " << task_queue_.size();
         
-        // Force complete any remaining active tasks to avoid memory leaks
-        if (active_tasks_.load() > 0) {
-            LOG_WARN(logger::runtime) << "Forcing completion of " << active_tasks_.load() << " remaining active tasks";
-            active_tasks_.store(0);
-        }
+        // Instead of force setting to 0, we'll let the stop() function handle cleanup
+        // This gives a chance for proper resource cleanup in stop()
     }
 }
 
@@ -303,6 +320,12 @@ void scheduler::stop() {
     }
     
     LOG_TRACE(logger::runtime) << "Stopping " << threads_.size() << " worker threads";
+    
+    // Notify all waiting threads that scheduler is stopping
+    {   
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        queue_cv_.notify_all();
+    }
     
     // Stop event loop
     if (event_loop_) {
@@ -319,15 +342,25 @@ void scheduler::stop() {
     }
     threads_.clear();
     
-    // Wait a bit more to ensure all tasks have completed
+    // Wait for a reasonable time for all tasks to complete
     // This is crucial for ensuring coroutines that were just resumed have time to complete
     LOG_TRACE(logger::runtime) << "Waiting for final task completion...";
-    for (int i = 0; i < 50; ++i) {
-        if (active_tasks_.load() == 0) {
-            LOG_TRACE(logger::runtime) << "All tasks completed during final wait at iteration " << i;
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    
+    // Use a timeout to avoid infinite waiting
+    const std::chrono::seconds timeout(1);
+    bool all_completed = false;
+    
+    {   
+        std::unique_lock<std::mutex> lock(completion_mutex_);
+        all_completed = completion_cv_.wait_for(lock, timeout, [this]() {
+            return active_tasks_.load() == 0;
+        });
+    }
+    
+    if (all_completed) {
+        LOG_TRACE(logger::runtime) << "All tasks completed during final wait";
+    } else {
+        LOG_WARN(logger::runtime) << "Timeout waiting for tasks to complete, still active: " << active_tasks_.load();
     }
     
     {
@@ -370,16 +403,30 @@ void scheduler::schedule(std::coroutine_handle<> handle) {
         return;
     }
     
-    std::lock_guard<std::mutex> lock(queue_mutex_);
-    task_queue_.push_back(handle);
-    // Only increment active tasks for newly scheduled tasks, not for re-scheduling
-    // The active task count is managed in the worker threads when handling tasks
-    LOG_TRACE(logger::runtime) << "Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load();
+    // Increment active tasks count before scheduling
+    // This ensures that active_tasks_ > 0 when there are pending tasks in the queue
+    task_started();
+    
+    {   
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        task_queue_.push_back(handle);
+        LOG_TRACE(logger::runtime) << "Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load();
+        
+        // Notify one waiting thread that a new task is available
+        queue_cv_.notify_one();
+    }
 }
 
 void scheduler::wait_for_completion() {
-    // Simple implementation: wait for a fixed time
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    LOG_TRACE_FUNC(logger::runtime);
+    
+    // Wait until all active tasks are completed and queue is empty
+    std::unique_lock<std::mutex> lock(completion_mutex_);
+    completion_cv_.wait(lock, [this]() {
+        return active_tasks_.load() == 0 && task_queue_.empty();
+    });
+    
+    LOG_TRACE(logger::runtime) << "All tasks completed and queue is empty";
 }
 
 bool scheduler::is_completed() {
@@ -399,6 +446,13 @@ void scheduler::task_completed() {
         active_tasks_--;
     }
     LOG_TRACE(logger::runtime) << "Task completed, active tasks: " << active_tasks_.load();
+    
+    // Notify any waiting threads that a task has completed
+    // This is important for wait_for_completion() to work correctly
+    {   
+        std::unique_lock<std::mutex> lock(completion_mutex_);
+        completion_cv_.notify_one();
+    }
 }
 
 // Global function implementations
@@ -496,10 +550,8 @@ void task_completed() {
     g_scheduler->task_completed();
 }
 
-void yield() {
-    std::this_thread::yield();
-    std::this_thread::sleep_for(std::chrono::microseconds(1));
-}
+// yield() is now defined as an inline function in the header file
+// No implementation needed here
 
 void sleep_ms(size_t ms) {
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));

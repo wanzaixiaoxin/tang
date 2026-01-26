@@ -21,8 +21,8 @@ namespace logger {
         runtime.set_level(LogLevel::INFO_LEVEL);
         channel.set_level(LogLevel::INFO_LEVEL);
         task.set_level(LogLevel::INFO_LEVEL);
-        test.set_level(LogLevel::DEBUG_LEVEL);
-        example.set_level(LogLevel::DEBUG_LEVEL);
+        test.set_level(LogLevel::TRACE_LEVEL);
+        example.set_level(LogLevel::TRACE_LEVEL);
     }
     
     /**

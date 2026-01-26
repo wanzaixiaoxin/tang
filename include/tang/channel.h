@@ -475,6 +475,17 @@ public:
             return;
         }
         
+        // Check if there are receive waiters, send directly if possible
+        if (!recv_waiters_.empty()) {
+            LOG_DEBUG(logger::channel) << "Found receive waiters, sending directly";
+            auto waiter = std::move(recv_waiters_.front());
+            recv_waiters_.pop_front();
+            T* value_ptr = waiter->get_value_ptr();
+            *(value_ptr) = value;
+            waiter->resume();
+            return;
+        }
+        
         send_waiters_.emplace_back(std::make_unique<send_waiter<T>>(handle, std::move(value)));
         {
             LOG_DEBUG(logger::channel) << "Send waiter registered, send_waiters size: " << send_waiters_.size();
@@ -493,6 +504,19 @@ public:
             LOG_DEBUG(logger::channel) << "Channel closed, immediately failing receive";
             *result_ptr = false;
             runtime::schedule(handle);
+            return;
+        }
+        
+        // Check if there are send waiters, receive directly if possible
+        if (!send_waiters_.empty()) {
+            LOG_DEBUG(logger::channel) << "Found send waiters, receiving directly";
+            auto waiter = std::move(send_waiters_.front());
+            send_waiters_.pop_front();
+            *value_ptr = std::move(waiter->get_value());
+            *result_ptr = true;
+            awaiter_ptr->set_result(true);
+            runtime::schedule(handle);
+            waiter->resume();
             return;
         }
         

@@ -25,7 +25,29 @@ void stop();
 void schedule(std::coroutine_handle<> handle);
 void task_started();
 void task_completed();
-void yield();
+
+// yield() returns an awaitable object that when awaited, suspends the current coroutine
+// and schedules it to be resumed later, allowing other tasks to run
+inline auto yield() noexcept {
+    class yield_awaiter {
+    public:
+        bool await_ready() const noexcept {
+            return false; // Always suspend
+        }
+        
+        void await_suspend(std::coroutine_handle<> handle) noexcept {
+            // Schedule the current coroutine to be resumed later
+            // This will add the coroutine back to the task queue
+            tang::runtime::schedule(handle);
+        }
+        
+        void await_resume() noexcept {
+        }
+    };
+    
+    return yield_awaiter{};
+}
+
 void sleep_ms(size_t ms);
 
 class scheduler {
@@ -70,6 +92,7 @@ private:
     std::vector<std::thread> threads_;
     std::list<std::coroutine_handle<>> task_queue_;  // Use list to implement FIFO
     std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;  ///< Condition variable for task queue notifications
     std::atomic_bool running_;
     std::atomic_int active_tasks_{0};
     std::condition_variable completion_cv_;

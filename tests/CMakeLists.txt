@@ -4,6 +4,12 @@
 add_library(test_framework STATIC test_framework.cpp)
 target_link_libraries(test_framework tang)
 
+# 添加tests目录作为包含目录，以便找到test_framework.h
+target_include_directories(test_framework PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# 为所有测试目标添加tests目录作为包含目录
+set_property(GLOBAL PROPERTY TEST_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
 # 为测试框架库添加G++特定选项
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(test_framework PRIVATE -fcoroutines)

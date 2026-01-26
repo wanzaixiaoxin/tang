@@ -450,7 +450,7 @@ TEST2(channel_performance_test,true) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
     
     LOG_INFO(logger::test) << "Performance test completed: " << NUM_OPERATIONS 
-              << " operations in " << duration.count() << "ms";
+              << " operations in " << duration.count() << "ms"<< " send_count: " << send_count.load() << " receive_count: " << receive_count.load() << " values";
     
     // Verify all operations completed
     ASSERT_EQUAL(NUM_OPERATIONS, send_count.load());
