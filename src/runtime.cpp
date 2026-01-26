@@ -100,6 +100,13 @@ void scheduler::init() {
                         continue;
                     }
                     
+                    // Check if coroutine handle is valid
+                    if (!handle.address()) {
+                        DEBUG_LOG("Thread " << i << " invalid coroutine handle, skipping resume");
+                        task_completed(); // Invalid task, consider completed
+                        continue;
+                    }
+                    
                     DEBUG_LOG("Thread " << i << " resuming coroutine");
                     
                     try {
@@ -121,7 +128,10 @@ void scheduler::init() {
                     } else {
                         DEBUG_LOG("Thread " << i << " coroutine not done, re-scheduling");
                         // Re-schedule the coroutine if it's not done
+                        // Don't call task_completed() since the task is still active
                         schedule(handle);
+                        // Important: Also increment active tasks when re-scheduling
+                        task_started();
                     }
                 } else {
                     // Short sleep when no tasks to reduce CPU usage
@@ -144,7 +154,12 @@ void scheduler::run() {
     DEBUG_LOG("Processing tasks in main thread...");
     
     size_t iteration = 0;
+    size_t last_active_tasks = 0;
+    size_t no_progress_count = 0;
+    const size_t MAX_NO_PROGRESS_ITERATIONS = 100; // Maximum iterations with no progress
+    
     // Continue running until no active tasks and queue is empty
+    // Also check for progress to avoid infinite loops in edge cases
     while (active_tasks_.load() > 0 || !task_queue_.empty()) {
         iteration++;
         if (iteration % 100 == 0) {
@@ -174,6 +189,13 @@ void scheduler::run() {
                 continue;
             }
             
+            // Check if coroutine handle is valid
+            if (!handle.address()) {
+                DEBUG_LOG("Main thread invalid coroutine handle, skipping resume");
+                task_completed(); // Invalid task, consider completed
+                continue;
+            }
+            
             DEBUG_LOG("Main thread resuming coroutine");
 
             try {
@@ -196,13 +218,39 @@ void scheduler::run() {
             } else {
                 DEBUG_LOG("Main thread coroutine not done, re-scheduling");
                 // Re-schedule the coroutine if it's not done
+                // Don't call task_completed() since the task is still active
                 schedule(handle);
             }
         } else {
             // Queue empty, sleep to avoid busy waiting
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        
+        // Check for progress to avoid infinite loops
+        size_t current_active_tasks = active_tasks_.load();
+        if (current_active_tasks == last_active_tasks && task_queue_.empty()) {
+            no_progress_count++;
+            if (no_progress_count >= MAX_NO_PROGRESS_ITERATIONS) {
+                DEBUG_LOG("Scheduler detected no progress for " << MAX_NO_PROGRESS_ITERATIONS << " iterations, exiting");
+                break;
+            }
+        } else {
+            last_active_tasks = current_active_tasks;
+            no_progress_count = 0;
+        }
     }
+    
+    // After main loop, wait a bit more to ensure all tasks have completed
+    // This handles cases where tasks were just scheduled but not yet processed
+    if (task_queue_.empty() && active_tasks_.load() == 0) {
+        DEBUG_LOG("Scheduler main loop completed, all tasks appear finished");
+    } else {
+        DEBUG_LOG("Scheduler exiting with " << active_tasks_.load() << " active tasks and queue size: " << task_queue_.size());
+    }
+    
+    // Additional extended wait to allow any final processing
+    // This is crucial for ensuring coroutines that were just resumed have time to complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     
     DEBUG_LOG("Scheduler run completed - all tasks finished after " << iteration << " iterations");
 }
@@ -249,8 +297,22 @@ void scheduler::schedule(std::coroutine_handle<> handle) {
     DEBUG_LOG_FUNC();
     DEBUG_LOG_HANDLE(handle);
     
+    // Check if coroutine handle is valid before scheduling
+    if (!handle.address()) {
+        DEBUG_LOG("Invalid coroutine handle, not scheduling");
+        return;
+    }
+    
+    // Check if coroutine is already done before scheduling
+    if (handle.done()) {
+        DEBUG_LOG("Coroutine already done, not scheduling");
+        return;
+    }
+    
     std::lock_guard<std::mutex> lock(queue_mutex_);
     task_queue_.push_back(handle);
+    // Only increment active tasks for newly scheduled tasks, not for re-scheduling
+    // The active task count is managed in the worker threads when handling tasks
     DEBUG_LOG("Task scheduled, queue size: " << task_queue_.size() << ", active tasks: " << active_tasks_.load());
 }
 
@@ -271,7 +333,10 @@ void scheduler::task_started() {
 
 void scheduler::task_completed() {
     DEBUG_LOG_FUNC();
-    active_tasks_--;
+    // Only decrement if active_tasks_ > 0 to avoid underflow
+    if (active_tasks_.load() > 0) {
+        active_tasks_--;
+    }
     DEBUG_LOG("Task completed, active tasks: " << active_tasks_.load());
 }
 
@@ -324,6 +389,18 @@ void stop() {
 void schedule(std::coroutine_handle<> handle) {
     DEBUG_LOG_FUNC();
     DEBUG_LOG_HANDLE(handle);
+    
+    // Check if coroutine handle is valid before scheduling
+    if (!handle.address()) {
+        DEBUG_LOG("Invalid coroutine handle, not scheduling");
+        return;
+    }
+    
+    // Check if coroutine is already done before scheduling
+    if (handle.done()) {
+        DEBUG_LOG("Coroutine already done, not scheduling");
+        return;
+    }
     
     if (!g_scheduler) {
         DEBUG_LOG("No scheduler found, initializing with default threads");

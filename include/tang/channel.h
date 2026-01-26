@@ -53,6 +53,12 @@ public:
         ::tang::runtime::schedule(handle_);
     }
 
+    void resume_with_result(bool success) override {
+        // For send waiter, we typically just resume regardless of success
+        (void)success; // Mark parameter as used to suppress warning
+        ::tang::runtime::schedule(handle_);
+    }
+
     T& get_value() {
         return value_;
     }
@@ -84,20 +90,37 @@ public:
         } else {
             LOG_INFO(tang::logger::channel, "recv_waiter::resume result_ptr_ is null");
         }
+        // Directly set awaiter's result_ member if available
+        if (awaiter_ptr_) {
+            awaiter_ptr_->set_result(true);
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume set awaiter.result_ to true");
+        } else {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume awaiter_ptr_ is null");
+        }
+        // Schedule the coroutine to run
+        LOG_INFO(tang::logger::channel, "Scheduling receiver coroutine handle: " + std::to_string(reinterpret_cast<size_t>(handle_.address())));
         ::tang::runtime::schedule(handle_);
     }
 
-    void resume_with_result(bool success) {
+    void resume_with_result(bool success) override {
         LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result called, success = " + std::string(success ? "true" : "false"));
-        // Directly set awaiter's result_ member, bypassing result_ptr_
-        // This ensures the result is set even if awaiter becomes invalid
+        // Set result flag if the pointer is valid
+        if (result_ptr_) {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result setting result_ptr_ to " + std::string(success ? "true" : "false"));
+            *result_ptr_ = success;
+        } else {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result result_ptr_ is null");
+        }
+        // Directly set awaiter's result_ member if available
         if (awaiter_ptr_) {
-            awaiter_ptr_->result_ = success;
+            awaiter_ptr_->set_result(success);
             LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result set awaiter.result_ to " + std::string(success ? "true" : "false"));
         } else {
             LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result awaiter_ptr_ is null");
         }
-        ::tang::runtime::schedule(handle_);
+        // Schedule the coroutine to run
+         LOG_INFO(tang::logger::channel, "Scheduling receiver coroutine handle: " + std::to_string(reinterpret_cast<size_t>(handle_.address())));
+         ::tang::runtime::schedule(handle_);
     }
 
     T* get_value_ptr() {
@@ -173,7 +196,27 @@ public:
     }
 
     bool await_resume() {
-        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::await_resume called, result_ = " + std::string(result_ ? "true" : "false"));
+        std::stringstream log_ss;
+        log_ss << "channel_recv_awaiter::await_resume called, result_ = " << (result_ ? "true" : "false")
+               << ", channel closed: " << (ch_.is_closed() ? "true" : "false");
+        
+        // Add safety check to prevent potential crashes
+        if (result_) {
+            try {
+                log_ss << ", value: ";
+                if constexpr (std::is_integral_v<T>) {
+                    log_ss << value_;
+                } else {
+                    log_ss << "(address: " << reinterpret_cast<size_t>(&value_) << ")";
+                }
+            } catch (const std::exception& e) {
+                log_ss << ", value access failed: " << e.what();
+            } catch (...) {
+                log_ss << ", value access failed with unknown error";
+            }
+        }
+        
+        LOG_INFO(tang::logger::channel, log_ss.str());
         return result_;
     }
 
@@ -241,7 +284,13 @@ public:
             T* value_ptr = waiter->get_value_ptr();
             LOG_INFO(tang::logger::channel, "Assigning value to receiver at address " + std::to_string(reinterpret_cast<size_t>(value_ptr)));
             *(value_ptr) = value;
-            waiter->resume();
+            
+            // Ensure waiter object remains valid during resume
+            auto resume_func = [waiter = std::move(waiter)]() {
+                waiter->resume();
+            };
+            resume_func();
+            
             LOG_INFO(tang::logger::channel, "Receiver resumed");
             return true;
         }

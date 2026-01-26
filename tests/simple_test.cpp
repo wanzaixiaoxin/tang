@@ -92,8 +92,9 @@ TEST2(channel_multiple_operations,true) {
         for (int i = 0; i < 5; ++i) {
             int value;
             bool result = co_await ch.recv(value);
-            LOG_DEBUG(tang::logger::test, "co_await ch.recv returned: " + std::to_string(result) + ", value: " + std::to_string(value));
-            received_count++;
+            LOG_INFO(tang::logger::test, "co_await ch.recv returned: " + std::to_string(result) + ", value: " + std::to_string(value));
+            received_count++; 
+            LOG_INFO(tang::logger::test, "received_count: " + std::to_string(received_count.load()));
         }
         LOG_INFO(tang::logger::test, "Received 5 values");
         co_return;
