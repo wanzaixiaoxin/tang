@@ -102,7 +102,7 @@ void scheduler::init() {
                         } else {
                             LOG_TRACE(tang::logger::runtime) << "Thread " << i << " coroutine not done, re-scheduling";
                             schedule(handle);
-                            task_started();
+                            // Don't call task_started() here - the task is still active
                         }
                     } else {
                         // Short sleep when no tasks to reduce CPU usage
