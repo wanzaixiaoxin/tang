@@ -28,6 +28,7 @@ public:
     virtual void resume() = 0;
     virtual void resume_with_result(bool success) {
         // Default implementation ignores result
+        (void)success; // Mark parameter as used to suppress warning
         resume();
     }
 };
@@ -61,23 +62,40 @@ private:
     T value_;
 };
 
+// Forward declaration
+template <typename T>
+class channel_recv_awaiter;
+
 // Receive waiter
 template <typename T>
 class recv_waiter : public coro_waiter {
 public:
-    recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::function<void(bool)> result_callback)
-        : handle_(handle), value_ptr_(value_ptr), result_callback_(std::move(result_callback)) {}
+    recv_waiter(std::coroutine_handle<> handle, T* value_ptr, bool* result_ptr, channel_recv_awaiter<T>* awaiter_ptr)
+        : handle_(handle), value_ptr_(value_ptr), result_ptr_(result_ptr), awaiter_ptr_(awaiter_ptr) {
+        LOG_INFO(tang::logger::channel, "recv_waiter constructed");
+    }
 
     void resume() override {
-        if (result_callback_) {
-            result_callback_(true); // Assume success for normal resume
+        LOG_INFO(tang::logger::channel, "recv_waiter::resume called, scheduling receiver coroutine");
+        // Set result flag to true if the pointer is valid
+        if (result_ptr_) {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume setting result_ptr_ to true");
+            *result_ptr_ = true;
+        } else {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume result_ptr_ is null");
         }
         ::tang::runtime::schedule(handle_);
     }
 
     void resume_with_result(bool success) {
-        if (result_callback_) {
-            result_callback_(success);
+        LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result called, success = " + std::string(success ? "true" : "false"));
+        // Directly set awaiter's result_ member, bypassing result_ptr_
+        // This ensures the result is set even if awaiter becomes invalid
+        if (awaiter_ptr_) {
+            awaiter_ptr_->result_ = success;
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result set awaiter.result_ to " + std::string(success ? "true" : "false"));
+        } else {
+            LOG_INFO(tang::logger::channel, "recv_waiter::resume_with_result awaiter_ptr_ is null");
         }
         ::tang::runtime::schedule(handle_);
     }
@@ -89,7 +107,8 @@ public:
 private:
     std::coroutine_handle<> handle_;
     T* value_ptr_;
-    std::function<void(bool)> result_callback_;
+    bool* result_ptr_;
+    channel_recv_awaiter<T>* awaiter_ptr_;
 };
 
 // Channel class forward declaration
@@ -104,14 +123,20 @@ public:
         : ch_(ch), value_(std::move(value)) {}
 
     bool await_ready() {
-        return ch_.try_send(value_);
+        LOG_INFO(tang::logger::channel, "channel_send_awaiter::await_ready called");
+        bool ready = ch_.try_send(value_);
+        LOG_INFO(tang::logger::channel, "channel_send_awaiter::await_ready returns: " + std::string(ready ? "true" : "false"));
+        return ready;
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
+        LOG_INFO(tang::logger::channel, "channel_send_awaiter::await_suspend called, registering sender waiter");
         ch_.register_send_waiter(handle, std::move(value_));
     }
 
-    void await_resume() {}
+    void await_resume() {
+        LOG_INFO(tang::logger::channel, "channel_send_awaiter::await_resume called");
+    }
 
 private:
     channel<T>& ch_;
@@ -123,27 +148,41 @@ template <typename T>
 class channel_recv_awaiter {
 public:
     channel_recv_awaiter(channel<T>& ch, T& value)
-        : ch_(ch), value_(value), result_(false) {}
+        : ch_(ch), value_(value), result_(false) {
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter constructed, result_ address: " + std::to_string(reinterpret_cast<size_t>(&result_)));
+    }
+
+    ~channel_recv_awaiter() {
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter destroyed, result_ = " + std::string(result_ ? "true" : "false"));
+    }
 
     bool await_ready() {
-        return ch_.try_recv(value_);
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::await_ready called");
+        bool success = ch_.try_recv(value_);
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::await_ready returns: " + std::string(success ? "true" : "false"));
+        if (success) {
+            result_ = true;
+            LOG_INFO(tang::logger::channel, "channel_recv_awaiter::result_ set to true");
+        }
+        return success;
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        ch_.register_recv_waiter(handle, &value_, [this](bool success) {
-            this->set_result(success);
-        });
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::await_suspend called, registering recv waiter");
+        ch_.register_recv_waiter(handle, &value_, &result_, this);
     }
 
     bool await_resume() {
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::await_resume called, result_ = " + std::string(result_ ? "true" : "false"));
         return result_;
     }
 
-    void set_result(bool result) {
-        result_ = result;
+    // Allow recv_waiter to set result_
+    void set_result(bool value) {
+        LOG_INFO(tang::logger::channel, "channel_recv_awaiter::set_result called, value = " + std::string(value ? "true" : "false"));
+        result_ = value;
     }
 
-private:
     channel<T>& ch_;
     T& value_;
     bool result_;
@@ -186,56 +225,76 @@ public:
         debug_msg << "try_send called, buffer size: " << buffer_.size() 
                   << ", recv_waiters: " << recv_waiters_.size() 
                   << ", send_waiters: " << send_waiters_.size();
-        LOG_DEBUG(tang::logger::channel, debug_msg.str());
+        LOG_INFO(tang::logger::channel, debug_msg.str());
+        LOG_INFO(tang::logger::channel, "try_send value address: " + std::to_string(reinterpret_cast<size_t>(&value)));
 
         if (closed_) {
-            LOG_DEBUG(tang::logger::channel, "Channel closed, send failed");
+            LOG_INFO(tang::logger::channel, "Channel closed, send failed");
             return false;
         }
 
         // If there are receive waiters, send directly
         if (!recv_waiters_.empty()) {
-            LOG_DEBUG(tang::logger::channel, "Sending directly to receiver waiter");
+            LOG_INFO(tang::logger::channel, "Sending directly to receiver waiter");
             auto waiter = std::move(recv_waiters_.front());
             recv_waiters_.pop_front();
-            *(waiter->get_value_ptr()) = value;
+            T* value_ptr = waiter->get_value_ptr();
+            LOG_INFO(tang::logger::channel, "Assigning value to receiver at address " + std::to_string(reinterpret_cast<size_t>(value_ptr)));
+            *(value_ptr) = value;
             waiter->resume();
+            LOG_INFO(tang::logger::channel, "Receiver resumed");
             return true;
         }
 
         // Otherwise check if buffer is full
         if (capacity_ == 0 || buffer_.size() >= capacity_) {
-            LOG_DEBUG(tang::logger::channel, "Buffer full, send failed");
+            LOG_INFO(tang::logger::channel, "Buffer full, send failed");
             return false;
         }
 
-        LOG_DEBUG(tang::logger::channel, "Adding to buffer");
+        LOG_INFO(tang::logger::channel, "Adding to buffer");
         buffer_.push_back(value);
+        LOG_INFO(tang::logger::channel, "Buffer size now: " + std::to_string(buffer_.size()));
         return true;
     }
 
     bool try_send(T&& value) {
         std::lock_guard<std::mutex> lock(mutex_);
 
+        std::stringstream debug_msg;
+        debug_msg << "try_send (move) called, buffer size: " << buffer_.size() 
+                  << ", recv_waiters: " << recv_waiters_.size() 
+                  << ", send_waiters: " << send_waiters_.size();
+        LOG_INFO(tang::logger::channel, debug_msg.str());
+        LOG_INFO(tang::logger::channel, "try_send (move) value address: " + std::to_string(reinterpret_cast<size_t>(&value)));
+
         if (closed_) {
+            LOG_INFO(tang::logger::channel, "Channel closed, send failed");
             return false;
         }
 
         // If there are receive waiters, send directly
         if (!recv_waiters_.empty()) {
+            LOG_INFO(tang::logger::channel, "Sending directly to receiver waiter (move)");
             auto waiter = std::move(recv_waiters_.front());
             recv_waiters_.pop_front();
-            *(waiter->get_value_ptr()) = std::move(value);
+            T* value_ptr = waiter->get_value_ptr();
+            LOG_INFO(tang::logger::channel, "Assigning move value to receiver at address " + std::to_string(reinterpret_cast<size_t>(value_ptr)));
+            *(value_ptr) = std::move(value);
             waiter->resume();
+            LOG_INFO(tang::logger::channel, "Receiver resumed (move)");
             return true;
         }
 
         // Otherwise check if buffer is full
         if (capacity_ == 0 || buffer_.size() >= capacity_) {
+            LOG_INFO(tang::logger::channel, "Buffer full, send failed (move)");
             return false;
         }
 
+        LOG_INFO(tang::logger::channel, "Adding to buffer (move)");
         buffer_.push_back(std::move(value));
+        LOG_INFO(tang::logger::channel, "Buffer size now: " + std::to_string(buffer_.size()));
         return true;
     }
 
@@ -266,21 +325,45 @@ public:
     bool try_recv(T& value) {
         std::lock_guard<std::mutex> lock(mutex_);
 
+        std::stringstream debug_msg;
+        debug_msg << "try_recv called, buffer size: " << buffer_.size() 
+                  << ", recv_waiters: " << recv_waiters_.size() 
+                  << ", send_waiters: " << send_waiters_.size();
+        LOG_INFO(tang::logger::channel, debug_msg.str());
+        LOG_INFO(tang::logger::channel, "try_recv value address: " + std::to_string(reinterpret_cast<size_t>(&value)));
+
         if (closed_ && buffer_.empty()) {
+            LOG_INFO(tang::logger::channel, "Channel closed and buffer empty, receive failed");
             return false;
         }
 
         // If there is data, receive directly
         if (!buffer_.empty()) {
+            LOG_INFO(tang::logger::channel, "Buffer has data, receiving directly");
             value = std::move(buffer_.front());
             buffer_.pop_front();
+            // Try to log the received value for integer types
+            {
+                std::stringstream val_ss;
+                val_ss << "Received value: ";
+                if constexpr (std::is_integral_v<T>) {
+                    val_ss << value;
+                } else {
+                    val_ss << "(address: " << reinterpret_cast<size_t>(&value) << ")";
+                }
+                LOG_INFO(tang::logger::channel, val_ss.str());
+            }
+            LOG_INFO(tang::logger::channel, "Buffer size now: " + std::to_string(buffer_.size()));
 
             // Wake up one send waiter
             if (!send_waiters_.empty()) {
+                LOG_INFO(tang::logger::channel, "Waking up send waiter");
                 auto waiter = std::move(send_waiters_.front());
                 send_waiters_.pop_front();
                 buffer_.push_back(std::move(waiter->get_value()));
+                LOG_INFO(tang::logger::channel, "Added sender's value to buffer, buffer size: " +std::to_string(buffer_.size()));
                 waiter->resume();
+                LOG_INFO(tang::logger::channel, "Sender resumed");
             }
 
             return true;
@@ -288,13 +371,26 @@ public:
 
         // If there are send waiters, receive directly
         if (!send_waiters_.empty()) {
+            LOG_INFO(tang::logger::channel, "Receiving directly from send waiter");
             auto waiter = std::move(send_waiters_.front());
             send_waiters_.pop_front();
             value = std::move(waiter->get_value());
+            {
+                std::stringstream val_ss;
+                val_ss << "Received value directly from sender: ";
+                if constexpr (std::is_integral_v<T>) {
+                    val_ss << value;
+                } else {
+                    val_ss << "(address: " << reinterpret_cast<size_t>(&value) << ")";
+                }
+                LOG_INFO(tang::logger::channel, val_ss.str());
+            }
             waiter->resume();
+            LOG_INFO(tang::logger::channel, "Sender resumed, received value");
             return true;
         }
 
+        LOG_INFO(tang::logger::channel, "No data and no senders, receive failed");
         return false;
     }
 
@@ -323,34 +419,86 @@ public:
     // Register send waiter
     void register_send_waiter(std::coroutine_handle<> handle, T&& value) {
         std::lock_guard<std::mutex> lock(mutex_);
+        {
+            std::stringstream ss;
+            ss << "Registering send waiter, send_waiters size: " << send_waiters_.size();
+            LOG_DEBUG(tang::logger::channel, ss.str());
+        }
+        
+        // If channel is already closed, immediately resume (send fails)
+        if (closed_) {
+            LOG_DEBUG(tang::logger::channel, "Channel closed, immediately failing send");
+            ::tang::runtime::schedule(handle);
+            return;
+        }
+        
         send_waiters_.emplace_back(std::make_unique<send_waiter<T>>(handle, std::move(value)));
+        {
+            std::stringstream ss;
+            ss << "Send waiter registered, send_waiters size: " << send_waiters_.size();
+            LOG_DEBUG(tang::logger::channel, ss.str());
+        }
     }
 
     // Register receive waiter
-    void register_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, std::function<void(bool)> result_callback) {
+    void register_recv_waiter(std::coroutine_handle<> handle, T* value_ptr, bool* result_ptr, channel_recv_awaiter<T>* awaiter_ptr) {
         std::lock_guard<std::mutex> lock(mutex_);
-        recv_waiters_.emplace_back(std::make_unique<recv_waiter<T>>(handle, value_ptr, std::move(result_callback)));
+        {
+            std::stringstream ss;
+            ss << "Registering recv waiter, recv_waiters size: " << recv_waiters_.size();
+            LOG_DEBUG(tang::logger::channel, ss.str());
+        }
+        
+        // If channel is already closed, immediately resume with failure
+        if (closed_) {
+            LOG_DEBUG(tang::logger::channel, "Channel closed, immediately failing receive");
+            *result_ptr = false;
+            ::tang::runtime::schedule(handle);
+            return;
+        }
+        
+        recv_waiters_.emplace_back(std::make_unique<recv_waiter<T>>(handle, value_ptr, result_ptr, awaiter_ptr));
+        {
+            std::stringstream ss;
+            ss << "Recv waiter registered, recv_waiters size: " << recv_waiters_.size();
+            LOG_DEBUG(tang::logger::channel, ss.str());
+        }
     }
     
     // Close channel
     void close() {
+        {
+            std::stringstream ss;
+            ss << "close() called, closed state before: " << closed_.load();
+            LOG_INFO(tang::logger::channel, ss.str());
+        }
         bool was_closed = closed_.exchange(true);
         if (was_closed) {
+            LOG_INFO(tang::logger::channel, "Channel already closed, skipping");
             return;
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
+        {
+            std::stringstream ss;
+            ss << "Waking up all waiters, send_waiters: " << send_waiters_.size() 
+               << ", recv_waiters: " << recv_waiters_.size();
+            LOG_INFO(tang::logger::channel, ss.str());
+        }
 
         // Wake up all waiters
         for (auto& waiter : send_waiters_) {
+            LOG_INFO(tang::logger::channel, "Waking up send waiter");
             waiter->resume();
         }
         send_waiters_.clear();
 
         for (auto& waiter : recv_waiters_) {
+            LOG_INFO(tang::logger::channel, "Waking up recv waiter with result=false");
             waiter->resume_with_result(false); // Channel closed, receive fails
         }
         recv_waiters_.clear();
+        LOG_INFO(tang::logger::channel, "All waiters cleared");
     }
 
     // Check channel status

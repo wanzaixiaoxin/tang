@@ -62,7 +62,7 @@ private:
         auto start_time = std::chrono::high_resolution_clock::now();
         
         try {
-            LOG_INFO(tang::logger::test, "Running test: " + test_case.name);
+            LOG_INFO(tang::logger::test, "***************** Running test: " + test_case.name + " *****************");
             test_case.function();
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = end_time - start_time;

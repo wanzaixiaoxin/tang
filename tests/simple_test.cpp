@@ -91,7 +91,8 @@ TEST2(channel_multiple_operations,true) {
         LOG_INFO(tang::logger::test, "Inside receiver coroutine");
         for (int i = 0; i < 5; ++i) {
             int value;
-            co_await ch.recv(value);
+            bool result = co_await ch.recv(value);
+            LOG_DEBUG(tang::logger::test, "co_await ch.recv returned: " + std::to_string(result) + ", value: " + std::to_string(value));
             received_count++;
         }
         LOG_INFO(tang::logger::test, "Received 5 values");
@@ -102,7 +103,9 @@ TEST2(channel_multiple_operations,true) {
     tang::go([&ch]() -> tang::task<void> {
         LOG_INFO(tang::logger::test, "Inside sender coroutine");
         for (int i = 0; i < 5; ++i) {
+            LOG_DEBUG(tang::logger::test, "Sending value: " + std::to_string(i));
             co_await ch.send(i);
+            LOG_DEBUG(tang::logger::test, "Send completed for value: " + std::to_string(i));
         }
         LOG_INFO(tang::logger::test, "Sent 5 values");
         co_return;

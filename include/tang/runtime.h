@@ -22,6 +22,8 @@ void init(size_t num_threads = 0);
 void run();
 void stop();
 void schedule(std::coroutine_handle<> handle);
+void task_started();
+void task_completed();
 void yield();
 void sleep_ms(size_t ms);
 

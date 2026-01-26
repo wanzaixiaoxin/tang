@@ -34,6 +34,8 @@ namespace tang {
 // Forward declaration
 namespace runtime {
     void schedule(std::coroutine_handle<> handle);
+    void task_started();
+    void task_completed();
 }
 
 // Coroutine task class
@@ -126,6 +128,8 @@ public:
             // If coroutine is already completed (may happen with suspend_never), no need to schedule
             if (handle.done()) {
                 TASK_DEBUG_LOG("Task already done, skipping schedule");
+                // Notify scheduler that task has completed
+                runtime::task_completed();
                 // Destroy the handle since coroutine is complete
                 handle.destroy();
                 handle = nullptr;
@@ -223,6 +227,8 @@ public:
         if (handle) {
             // If coroutine is already completed (may happen with suspend_never), no need to schedule
             if (handle.done()) {
+                // Notify scheduler that task has completed
+                runtime::task_completed();
                 handle.destroy();
                 handle = nullptr;
                 return;
@@ -265,6 +271,9 @@ auto go(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
     
+    // Notify scheduler that a new task has started
+    runtime::task_started();
+    
     TASK_DEBUG_LOG("Running task");
     task.run(); // Schedule task immediately
     
@@ -276,6 +285,10 @@ template <typename F, typename... Args>
 auto spawn(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
+    
+    // Notify scheduler that a new task has started
+    runtime::task_started();
+    
     task.run(); // Schedule task immediately
     return task;
 }
