@@ -151,6 +151,62 @@ public:
     }
     
     /**
+     * Stream-based logging interface
+     */
+    class LogStream {
+    private:
+        Logger& logger_;
+        LogLevel level_;
+        std::stringstream ss_;
+        const std::string& file_;
+        int line_;
+        
+    public:
+        LogStream(Logger& logger, LogLevel level, const std::string& file, int line)
+            : logger_(logger), level_(level), file_(file), line_(line) {}
+        
+        ~LogStream() {
+            if (logger_.should_log(level_)) {
+                logger_.output_message(level_, logger_.format_message(level_, ss_.str(), file_, line_));
+            }
+        }
+        
+        template<typename T>
+        LogStream& operator<<(const T& value) {
+            ss_ << value;
+            return *this;
+        }
+    };
+    
+    /**
+     * Create a debug log stream
+     */
+    LogStream debug_stream(const std::string& file, int line) {
+        return LogStream(*this, LogLevel::DEBUG_LEVEL, file, line);
+    }
+    
+    /**
+     * Create an info log stream
+     */
+    LogStream info_stream(const std::string& file, int line) {
+        return LogStream(*this, LogLevel::INFO_LEVEL, file, line);
+    }
+    
+    /**
+     * Create a warning log stream
+     */
+    LogStream warn_stream(const std::string& file, int line) {
+        return LogStream(*this, LogLevel::WARN_LEVEL, file, line);
+    }
+    
+    /**
+     * Create an error log stream
+     */
+    LogStream error_stream(const std::string& file, int line) {
+        return LogStream(*this, LogLevel::ERROR_LEVEL, file, line);
+    }
+    
+    /**
      * Set log level for this logger
      */
     void set_level(LogLevel level) {
@@ -184,11 +240,13 @@ namespace logger {
     void set_level(LogLevel level);
 }
 
-// Convenience macros for logging
-#define LOG_DEBUG(logger, msg) logger.debug(msg, __FILE__, __LINE__)
-#define LOG_INFO(logger, msg) logger.info(msg, __FILE__, __LINE__)
-#define LOG_WARN(logger, msg) logger.warn(msg, __FILE__, __LINE__)
-#define LOG_ERROR(logger, msg) logger.error(msg, __FILE__, __LINE__)
+
+
+// Stream-based logging macros
+#define LOG_DEBUG(logger) logger.debug_stream(__FILE__, __LINE__)
+#define LOG_INFO(logger) logger.info_stream(__FILE__, __LINE__)
+#define LOG_WARN(logger) logger.warn_stream(__FILE__, __LINE__)
+#define LOG_ERROR(logger) logger.error_stream(__FILE__, __LINE__)
 
 #define LOG_DEBUG_FUNC(logger) logger.debug(std::string(__FUNCTION__) + " called", __FILE__, __LINE__)
 #define LOG_DEBUG_FUNC_WITH_HANDLE(logger, handle) \
