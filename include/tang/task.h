@@ -120,6 +120,10 @@ public:
                 return;
             }
             LOG_TRACE(tang::logger::task) << "Scheduling task";
+            
+            // Notify scheduler that a new task has started
+            runtime::task_started();
+            
             runtime::schedule(handle);
             LOG_TRACE(tang::logger::task) << "Task scheduled";
         } else {
@@ -255,11 +259,8 @@ auto go(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
     
-    // Notify scheduler that a new task has started
-    runtime::task_started();
-    
     LOG_TRACE(tang::logger::task) << "Running task";
-    task.run(); // Schedule task immediately
+    task.run(); // Schedule task immediately (task.run() will call task_started())
     
     LOG_TRACE(tang::logger::task) << "Task created and scheduled";
     return task;
@@ -270,10 +271,7 @@ auto spawn(F&& f, Args&&... args) {
     using result_type = decltype(std::declval<F&>()(std::declval<Args>()...));
     auto task = go_helper<result_type>::create(std::forward<F>(f), std::forward<Args>(args)...);
     
-    // Notify scheduler that a new task has started
-    runtime::task_started();
-    
-    task.run(); // Schedule task immediately
+    task.run(); // Schedule task immediately (task.run() will call task_started())
     return task;
 }
 

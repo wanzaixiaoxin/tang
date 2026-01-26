@@ -136,7 +136,7 @@ void scheduler::run() {
     size_t iteration = 0;
     size_t last_active_tasks = 0;
     size_t no_progress_count = 0;
-    const size_t MAX_NO_PROGRESS_ITERATIONS = 100; // Maximum iterations with no progress
+    const size_t MAX_NO_PROGRESS_ITERATIONS = 500; // Maximum iterations with no progress (increased for concurrency)
     
     // Continue running until no active tasks and queue is empty
     // Also check for progress to avoid infinite loops in edge cases

@@ -394,28 +394,34 @@ TEST2(channel_exception_handling,true) {
 }
 
 /**
- * Test channel performance with simple synchronous operations
+ * Test channel performance with true concurrent operations
  */
 TEST2(channel_performance_test,true) {
-    tang::RuntimeScope runtime(1);
+    tang::RuntimeScope runtime(2); // Use 2 threads for true concurrency
     
-    const int NUM_OPERATIONS = 10; // Very small number for stability
-    tang::channel<int> ch(20); // Large buffer to avoid blocking
+    const int NUM_OPERATIONS = 20;
+    tang::channel<int> ch(10); // Moderate buffer size
     std::atomic_int send_count{0};
     std::atomic_int receive_count{0};
     
     auto start_time = std::chrono::steady_clock::now();
     
-    // First send all values synchronously to avoid scheduling issues
-    for (int i = 0; i < NUM_OPERATIONS; ++i) {
-        bool sent = ch.try_send(i);
-        ASSERT_TRUE(sent);
-        send_count++;
-    }
+    // Create sender coroutine - true concurrent operation
+    tang::go([&ch, &send_count, NUM_OPERATIONS]() -> tang::task<void> {
+        LOG_INFO(tang::logger::test) << "Performance sender started";
+        
+        for (int i = 0; i < NUM_OPERATIONS; ++i) {
+            LOG_DEBUG(tang::logger::test) << "Sender sending value: " << i;
+            co_await ch.send(i);
+            send_count++;
+            LOG_DEBUG(tang::logger::test) << "Sender sent value: " << i << ", count: " << send_count.load();
+        }
+        
+        LOG_INFO(tang::logger::test) << "Performance sender finished";
+        co_return;
+    });
     
-    LOG_INFO(tang::logger::test) << "Sent " << send_count.load() << " values to buffer";
-    
-    // Create receiver coroutine to receive all values
+    // Create receiver coroutine - true concurrent operation
     tang::go([&ch, &receive_count, NUM_OPERATIONS]() -> tang::task<void> {
         LOG_INFO(tang::logger::test) << "Performance receiver started";
         
@@ -425,7 +431,7 @@ TEST2(channel_performance_test,true) {
             
             if (result) {
                 receive_count++;
-                LOG_DEBUG(tang::logger::test) << "Received value: " << value << ", count: " << receive_count.load();
+                LOG_DEBUG(tang::logger::test) << "Receiver received value: " << value << ", count: " << receive_count.load();
             } else {
                 LOG_ERROR(tang::logger::test) << "Performance test receive failed";
                 break;
