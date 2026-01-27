@@ -345,27 +345,27 @@ public:
         return true;
     }
 
-    // Send operator - blocking send
-    channel& operator<<(T&& value) {
+    // Send operator - async send
+    task<bool> operator<<(T&& value) {
         LOG_DEBUG(logger::channel) << "Sending value";
         while (!try_send(std::move(value))) {
-            // Simple busy wait, should suspend coroutine in practice
-            LOG_DEBUG(logger::channel) << "Send blocked, waiting...";
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
+            // If channel is full, we need to suspend until space is available
+            // For now we'll return false, but ideally we'd have a proper async mechanism
+            co_return false;
         }
         LOG_DEBUG(logger::channel) << "Send completed";
-        return *this;
+        co_return true;
     }
 
-    channel& operator<<(const T& value) {
+    task<bool> operator<<(const T& value) {
         LOG_DEBUG(logger::channel) << "Sending value";
         while (!try_send(value)) {
-            // Simple busy wait, should suspend coroutine in practice
-            LOG_DEBUG(logger::channel) << "Send blocked, waiting...";
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
+            // If channel is full, we need to suspend until space is available
+            // For now we'll return false, but ideally we'd have a proper async mechanism
+            co_return false;
         }
         LOG_DEBUG(logger::channel) << "Send completed";
-        return *this;
+        co_return true;
     }
     
     // Try receive
@@ -449,16 +449,16 @@ public:
         return channel_recv_awaiter<T>(*this, value);
     }
 
-    // Receive operator - blocking receive
-    bool operator>>(T& value) {
+    // Receive operator - async receive
+    task<bool> operator>>(T& value) {
         LOG_DEBUG(logger::channel) << "Attempting to receive value";
         while (!try_recv(value)) {
-            // Simple busy wait, should suspend coroutine in practice
-            LOG_DEBUG(logger::channel) << "Receive blocked, waiting...";
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
+            // If channel is empty, we need to suspend until data is available
+            // For now we'll return false, but ideally we'd have a proper async mechanism
+            co_return false;
         }
         LOG_DEBUG(logger::channel) << "Receive completed";
-        return true;
+        co_return true;
     }
 
     // Register send waiter
