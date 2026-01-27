@@ -226,8 +226,26 @@ public:
     }
     
     static task<void> sleep(std::chrono::milliseconds duration) {
-        std::this_thread::sleep_for(duration);
-        co_return;
+        // Create a temporary thread to track sleep time and schedule resume
+        struct awaiter {
+            std::chrono::milliseconds duration_;
+            
+            bool await_ready() const noexcept {
+                return false; // Never ready immediately
+            }
+            
+            void await_suspend(std::coroutine_handle<> continuation) {
+                // Launch a detached thread to wake up the coroutine after the specified duration
+                std::thread([continuation, this]() {
+                    std::this_thread::sleep_for(duration_);
+                    runtime::schedule(continuation);
+                }).detach();
+            }
+            
+            void await_resume() const noexcept {}
+        };
+        
+        co_await awaiter{duration};
     }
     
 private:
