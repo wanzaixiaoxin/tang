@@ -131,6 +131,13 @@ public:
         }
     }
     
+    // For task<bool>, allow implicit conversion to bool for use in conditions
+    operator bool() const requires (std::is_same_v<T, bool>) {
+        // This is a simplified conversion - in practice, you might want to check
+        // if the task is completed and get its result
+        return handle && !handle.done();
+    }
+    
 private:
     handle_type handle;
 };
