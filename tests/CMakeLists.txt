@@ -21,6 +21,8 @@ set(TESTS
     task_test
     channel_test
     select_test
+    select_simulation_test
+    defer_test
     runtime_test
     integration_test
     simple_test
